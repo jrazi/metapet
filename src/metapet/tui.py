@@ -13,10 +13,11 @@ from collections.abc import Callable
 
 import click
 from rich.text import Text
-from textual import on
+from textual import events, on
 from textual.app import App, ComposeResult, SuspendNotSupported
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Footer, Input, Label, Markdown
 
@@ -170,6 +171,23 @@ def _run_in_thread(fn: Callable[[], None]) -> None:
         raise errors[0]
 
 
+class IdeaTable(DataTable):
+    """The idea list; tells the app when its width changes, so titles can be refitted."""
+
+    class WidthChanged(Message):
+        pass
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.last_width = 0
+
+    def on_resize(self, event: events.Resize) -> None:
+        # The table's own size, not the terminal's: the app's resize comes before layout.
+        if event.size.width != self.last_width:
+            self.last_width = event.size.width
+            self.post_message(self.WidthChanged())
+
+
 class PetApp(App[None]):
     TITLE = "metapet"
     CSS = """
@@ -225,7 +243,7 @@ class PetApp(App[None]):
     def compose(self) -> ComposeResult:
         yield FilterInput(placeholder="filter: words, status:spec, tag:cli", id="filter")
         with Horizontal():
-            yield DataTable(id="ideas", cursor_type="row", zebra_stripes=True)
+            yield IdeaTable(id="ideas", cursor_type="row", zebra_stripes=True)
             with VerticalScroll(id="preview-pane"):
                 yield Markdown(id="preview")
         yield Footer()
@@ -234,9 +252,9 @@ class PetApp(App[None]):
         self.reload()
         self.table.focus()
 
-    def on_resize(self) -> None:
-        # The table has its new size only after the next refresh.
-        self.call_after_refresh(self.fill_table)
+    @on(IdeaTable.WidthChanged)
+    def refit_titles(self) -> None:
+        self.fill_table()
 
     @property
     def table(self) -> DataTable:

@@ -437,3 +437,27 @@ def test_promote_shelved_idea_moves_back(store):
         assert notices(app)[-1] == "old-game: shelved → sketch"
 
     run(app, test)
+
+
+def test_title_column_follows_every_resize(store):
+    store.create("Telegram bot that downloads music from Spotify links and sends back files")
+    app, _ = make_app(store)
+
+    def widths(table):
+        columns = table.ordered_columns
+        return sum(column.get_render_width(table) for column in columns), table.size.width
+
+    async def main():
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            table = app.query_one("#ideas", DataTable)
+            for size in [(160, 45), (80, 24), (120, 30)]:
+                await pilot.resize_terminal(*size)
+                await pilot.pause()
+                await pilot.pause()
+                total, available = widths(table)
+                # The columns fill the pane, leaving only room for a scrollbar.
+                assert available - 6 <= total <= available, (size, total, available)
+
+    asyncio.run(main())
+
