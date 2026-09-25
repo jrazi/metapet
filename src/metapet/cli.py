@@ -687,7 +687,10 @@ def ui(ctx: typer.Context) -> None:
     """Browse and change ideas in a full-screen view.
 
     Keys: / filter, a add, p promote, r refine, n note, s shelve, e edit, x excitement, q quit.
+    Needs a terminal.
     """
+    if not _interactive(False):
+        _fail("pet ui needs a terminal; use pet ls, pet show and pet set instead")
     _run_ui(ctx)
 
 

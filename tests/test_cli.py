@@ -400,3 +400,10 @@ def test_bare_pet_in_a_terminal_opens_the_ui(home, monkeypatch):
     assert pet(home).exit_code == 0
     assert pet(home, "ui").exit_code == 0
     assert len(opened) == 2
+
+
+def test_ui_without_a_terminal_fails(home):
+    pet(home, "init")
+    result = pet(home, "ui")
+    assert result.exit_code == 1
+    assert "needs a terminal" in result.output
