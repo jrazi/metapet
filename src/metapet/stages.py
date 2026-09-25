@@ -32,9 +32,10 @@ def load(name: str, home: DataHome | None = None) -> str:
 def sections(text: str) -> list[tuple[str, str]]:
     """Split markdown into (heading, block) pairs at `## ` headings."""
     matches = list(HEADING.finditer(text))
+    ends = [m.start() for m in matches[1:]] + ([len(text)] if matches else [])
     return [
-        (m.group(1).strip().lower(), text[m.start() : nxt.start() if nxt else len(text)].strip())
-        for m, nxt in zip(matches, [*matches[1:], None], strict=True)
+        (m.group(1).strip().lower(), text[m.start() : end].strip())
+        for m, end in zip(matches, ends, strict=True)
     ]
 
 
