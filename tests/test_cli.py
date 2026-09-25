@@ -133,6 +133,12 @@ def test_help_explains_the_lifecycle(home):
         assert "stages.toml" in output
 
 
+def test_lifecycle_help_rows_fit_in_80_columns(home):
+    output = runner.invoke(app, ["--help"], env={"COLUMNS": "80"}).output
+    assert "features*, mvp*, stack, risks, prior_art, effort, impact" in output
+    assert "title*, summary, tags, excitement" in output
+
+
 def idea_text(home, idea_id):
     return (home.ideas / f"{idea_id}.md").read_text(encoding="utf-8")
 

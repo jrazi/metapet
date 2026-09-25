@@ -26,23 +26,30 @@ from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import IdeaLookupError, Store
 
 
-def _lifecycle_help() -> str:
-    built_in = schema.builtin()
+def _stage_rows(idea_schema: Schema) -> list[str]:
+    """Each stage with its meaning, and its field keys on the next line (* = expected)."""
 
     def keys(stage_fields) -> str:
         return ", ".join(f"{f.key}*" if f.required else f.key for f in stage_fields)
 
-    described = stages.describe(built_in)
-    name_w = max(len(status.value) for status, _, _ in described)
-    meaning_w = max(len(meaning) for _, meaning, _ in described)
-    rows = [
-        f"  {status.value:<{name_w}}  {meaning:<{meaning_w}}  {keys(stage_fields)}".rstrip()
-        for status, meaning, stage_fields in described
+    described = [
+        (status.value, meaning, stage_fields)
+        for status, meaning, stage_fields in stages.describe(idea_schema)
     ]
-    rows.append(f"  {'any stage':<{name_w + 2 + meaning_w}}  {keys(built_in.any_fields())}")
+    described.append(("any stage", "can be filled at any stage", idea_schema.any_fields()))
+    name_w = max(len(name) for name, _, _ in described)
+    rows = []
+    for name, meaning, stage_fields in described:
+        rows.append(f"  {name:<{name_w}}  {meaning}".rstrip())
+        if stage_fields:
+            rows.append(f"  {'':<{name_w}}  {keys(stage_fields)}")
+    return rows
+
+
+def _lifecycle_help() -> str:
     return (
         "[bold]Lifecycle:[/] seed → sketch → spec → building → shipped, or shelved at any point.\n"
-        + "\n".join(rows)
+        + "\n".join(_stage_rows(schema.builtin()))
         + "\n\n"
         "Fields marked * are expected before moving on; promote only warns when they are empty, "
         "and any question can be skipped. Change the stages in <data home>/stages.toml (see the "
