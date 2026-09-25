@@ -28,7 +28,7 @@ and a short description:
 
 ```console
 $ pet add "Nearby concert alerts" -t music \
-    -m "Email me when an artist I listen to on Spotify announces a show in my city."
+    -m "A small service that checks which artists I listen to on Spotify and emails me when one of them announces a show in my city."
 + nearby-concert-alerts  Nearby concert alerts
 ```
 
@@ -100,7 +100,7 @@ excitement: 5
 effort: M
 ---
 
-Email me when an artist I listen to on Spotify announces a show in my city.
+A small service that checks which artists I listen to on Spotify and emails me when one of them announces a show in my city.
 
 ## Problem
 I find out about shows after they sell out
