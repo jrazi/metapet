@@ -353,6 +353,16 @@ def test_review_without_a_terminal_lists_due_ideas(home):
     assert "reviewed:" not in idea_text(home, "budget-tracker")
 
 
+def test_review_list_keeps_last_seen_whole_at_80_columns(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-t", "money", "-t", "finance")
+    make_old(home, "budget-tracker")
+    args = ["--home", str(home.path), "review"]
+    output = runner.invoke(app, args, env={"COLUMNS": "80"}).output
+    assert "2020-01-01" in output
+    assert "created" not in output
+
+
 def test_review_with_nothing_due(home):
     pet(home, "init")
     pet(home, "add", "Budget tracker")

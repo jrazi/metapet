@@ -191,7 +191,10 @@ def _status(status: Status) -> str:
     return f"[{STATUS_STYLE[status]}]{status.value}[/]"
 
 
-def _ideas_table(ideas: list[Idea], extra: dict[str, list[str]] | None = None) -> Table:
+def _ideas_table(
+    ideas: list[Idea], extra: dict[str, list[str]] | None = None, *, created: bool = True
+) -> Table:
+    """A table of ideas; extra columns are never cut, so narrow terminals shrink the title."""
     table = Table(box=None, header_style="bold", pad_edge=False)
     table.add_column("id", style="bold", no_wrap=True, min_width=max(len(i.id) for i in ideas))
     table.add_column("title")
@@ -200,9 +203,11 @@ def _ideas_table(ideas: list[Idea], extra: dict[str, list[str]] | None = None) -
     table.add_column("imp", justify="right")
     table.add_column("effort")
     table.add_column("tags", style="dim")
-    table.add_column("created", style="dim")
-    for name in extra or {}:
-        table.add_column(name, justify="right")
+    if created:
+        table.add_column("created", style="dim", no_wrap=True)
+    for name, values in (extra or {}).items():
+        width = max(len(name), *(len(value) for value in values))
+        table.add_column(name, justify="right", no_wrap=True, min_width=width)
     for row, idea in enumerate(ideas):
         table.add_row(
             idea.id,
@@ -212,7 +217,7 @@ def _ideas_table(ideas: list[Idea], extra: dict[str, list[str]] | None = None) -
             str(idea.impact or ""),
             idea.effort.value if idea.effort else "",
             ", ".join(idea.tags),
-            idea.created.isoformat(),
+            *([idea.created.isoformat()] if created else []),
             *[values[row] for values in (extra or {}).values()],
         )
     return table
@@ -673,7 +678,7 @@ def review(
         return
     if not _interactive(no_input):
         seen = [review_.last_seen(idea).isoformat() for idea in ideas]
-        console.print(_ideas_table(ideas, {"last seen": seen}))
+        console.print(_ideas_table(ideas, {"last seen": seen}, created=False))
         console.print("Run pet review in a terminal to go through them.")
         return
     result = review_.run(_session(store, idea_schema), ideas)
