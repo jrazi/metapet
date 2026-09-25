@@ -103,6 +103,14 @@ def _review_one(s: wizard.Session, idea: Idea) -> bool:
             return True
 
 
+def position(number: int, total: int, idea: Idea, today: dt.date) -> str:
+    """`2/5 · budget-tracker · last seen 2026-05-01 (147 days ago)`"""
+    seen = last_seen(idea)
+    days = (today - seen).days
+    ago = "today" if days <= 0 else "1 day ago" if days == 1 else f"{days} days ago"
+    return f"{number}/{total} · {idea.id} · last seen {seen.isoformat()} ({ago})"
+
+
 def _reload(idea: Idea) -> Idea | None:
     """The idea as it is on disk now, so changes made during the review are not overwritten."""
     if idea.path is None:
@@ -121,12 +129,13 @@ def run(s: wizard.Session, ideas: list[Idea], today: dt.date | None = None) -> R
     s.prompter.message(f"{total} idea{'' if total == 1 else 's'} to review.")
     handled = done = 0
     try:
-        for idea in ideas:
+        for number, idea in enumerate(ideas, start=1):
             fresh = _reload(idea)
             if fresh is None:
                 s.prompter.message(f"{idea.id}: skipped, its file is gone or cannot be read.")
                 done += 1
                 continue
+            s.prompter.message(position(number, total, fresh, s.today))
             if not _review_one(s, fresh):
                 break
             handled += 1

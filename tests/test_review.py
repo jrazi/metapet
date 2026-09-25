@@ -204,3 +204,12 @@ def test_eof_stops_review(store):
     s, _ = session(store, [EOFError()])
     result = review.run(s, [idea])
     assert (result.handled, result.remaining, result.stopped) == (0, 1, True)
+
+
+def test_review_shows_position_and_last_seen(store):
+    first = old_idea(store, "First idea")
+    second = old_idea(store, "Second idea")
+    s, p = session(store, ["skip", "skip"])
+    review.run(s, [first, second])
+    assert "1/2 · first-idea · last seen 2026-01-01 (59 days ago)" in p.messages
+    assert "2/2 · second-idea · last seen 2026-01-01 (59 days ago)" in p.messages
