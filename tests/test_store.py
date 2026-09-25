@@ -87,3 +87,27 @@ def test_status_next():
     assert Status.SEED.next() == Status.SKETCH
     assert Status.BUILDING.next() == Status.SHIPPED
     assert Status.SHELVED.next() is None
+
+
+def test_impact_and_reviewed_round_trip(store):
+    idea = store.create("Scored", excitement=2, impact=4)
+    idea.mark_reviewed(dt.date(2026, 1, 2))
+    store.save(idea)
+    loaded = Idea.load(idea.path)
+    assert (loaded.impact, loaded.reviewed, loaded.updated) == (4, dt.date(2026, 1, 2), None)
+    keys = [
+        line.split(":")[0] for line in idea.path.read_text().split("---")[1].strip().splitlines()
+    ]
+    assert keys == ["id", "title", "status", "created", "reviewed", "excitement", "impact"]
+
+
+def test_impact_out_of_range_is_rejected():
+    text = "---\nid: x\ntitle: x\nstatus: seed\ncreated: 2026-01-01\nimpact: 9\n---\n"
+    with pytest.raises(IdeaError, match="impact must be 1-5, got 9"):
+        Idea.from_markdown(text)
+
+
+def test_all_tags(store):
+    store.create("One", tags=["cli", "Bot"])
+    store.create("Two", tags=["CLI", "art"])
+    assert store.all_tags() == ["art", "Bot", "cli"]

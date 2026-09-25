@@ -21,3 +21,12 @@ def test_rank_prefers_excited_cheap_advanced_and_old():
     ]
     order = [i.id for i, _ in scoring.rank(ideas, TODAY)]
     assert order == ["fun-small-spec", "fun-small", "old-default", "new-default", "meh-huge"]
+
+
+def test_impact_changes_the_order():
+    ideas = [
+        idea("exciting", excitement=5, impact=1),
+        idea("useful", excitement=3, impact=5),
+    ]
+    assert [i.id for i, _ in scoring.rank(ideas, TODAY)] == ["useful", "exciting"]
+    assert scoring.score(idea("defaults"), TODAY) == 3.0  # (3 + 3) / M

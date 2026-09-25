@@ -1,9 +1,11 @@
+import datetime as dt
 import json
 
 from typer.testing import CliRunner
 
 from metapet import cli
 from metapet.cli import app
+from metapet.prompter import ScriptedPrompter
 
 runner = CliRunner()
 
@@ -29,8 +31,24 @@ def test_capture_browse_and_grow(home, tmp_path):
     assert result.exit_code == 0, result.output
     assert (home.ideas / "spotify-downloader-bot-for-telegram.md").exists()
 
-    result = pet(home, "new", "--no-edit", input="Budget tracker\nTrack stuff\nmoney, cli\n4\nm\n")
+    result = pet(
+        home,
+        "new",
+        "Budget tracker",
+        "-m",
+        "Track stuff",
+        "-t",
+        "money",
+        "-t",
+        "cli",
+        "-x",
+        "4",
+        "--set",
+        "effort=m",
+    )
     assert result.exit_code == 0, result.output
+    budget = (home.ideas / "budget-tracker.md").read_text()
+    assert "excitement: 4" in budget and "effort: M" in budget and "Track stuff" in budget
 
     listing = pet(home, "ls", "--tag", "bot").output
     assert "spotify-downloader" in listing and "budget-tracker" not in listing
@@ -109,5 +127,313 @@ def test_help_explains_the_lifecycle(home):
     for args in (["--help"], ["promote", "--help"]):
         output = runner.invoke(app, args, env={"COLUMNS": "200"}).output
         assert "seed → sketch → spec → building → shipped" in output
-        assert "adds: Problem, Rough solution" in output
-        assert "Structure is loose" in output
+        assert "problem*, audience, solution*, value, why_now" in output
+        assert "notes, links, related" in output
+        assert "promote only warns" in output
+        assert "stages.toml" in output
+
+
+def test_lifecycle_help_rows_fit_in_80_columns(home):
+    output = runner.invoke(app, ["--help"], env={"COLUMNS": "80"}).output
+    assert "features*, mvp*, stack, risks, prior_art, effort, impact" in output
+    assert "title*, summary, tags, excitement" in output
+
+
+def idea_text(home, idea_id):
+    return (home.ideas / f"{idea_id}.md").read_text(encoding="utf-8")
+
+
+def test_new_needs_a_title(home):
+    pet(home, "init")
+    result = pet(home, "new", "--no-input")
+    assert result.exit_code == 1
+    assert 'a title is required: pet new "TITLE"' in result.output
+
+
+def test_new_rejects_bad_values_without_creating_a_file(home):
+    pet(home, "init")
+    result = pet(home, "new", "Thing", "-x", "9", "--set", "bogus=1")
+    assert result.exit_code == 1
+    assert "excitement must be a number from 1 to 5" in result.output
+    assert "unknown field 'bogus'" in result.output
+    result = pet(home, "new", "Thing", "-x", "3", "--set", "excitement=4")
+    assert result.exit_code == 1 and "both as a flag and with --set" in result.output
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_new_can_fill_later_stage_fields(home):
+    pet(home, "init")
+    assert pet(home, "new", "Thing", "--set", "mvp=Just a script").exit_code == 0
+    text = idea_text(home, "thing")
+    assert "status: seed" in text and "## MVP scope\nJust a script" in text
+    assert "updated:" not in text
+
+
+def test_set_changes_fields_and_tags(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-t", "old", "-t", "keep")
+    result = pet(home, "set", "budget", "excitement=4", "+cli", "-old", "features=a", "features=b")
+    assert result.exit_code == 0, result.output
+    assert "budget-tracker: excitement 4, features a, b, +cli, -old" in result.output
+    text = idea_text(home, "budget-tracker")
+    assert "- keep\n- cli" in text and "## Features\n- a\n- b" in text
+    assert pet(home, "set", "budget", "--", "-keep").exit_code == 0
+    assert "keep" not in idea_text(home, "budget-tracker")
+
+
+def test_set_with_a_bad_key_leaves_the_file_unchanged(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    before = idea_text(home, "budget-tracker")
+    result = pet(home, "set", "budget", "excitement=4", "nope=1")
+    assert result.exit_code == 1
+    assert "unknown field 'nope'" in result.output
+    assert idea_text(home, "budget-tracker") == before
+
+
+def test_note_appends_a_dated_line(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-m", "Track stuff")
+    assert pet(home, "note", "budget", "first\nthought").output.strip() == "budget-tracker: noted"
+    pet(home, "note", "budget", "second")
+    today = dt.date.today().isoformat()
+    assert f"## Notes\n- {today}: first thought\n- {today}: second" in idea_text(
+        home, "budget-tracker"
+    )
+
+
+def test_edit_one_field(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    seen = {}
+
+    def fake_edit(text=None, **kwargs):
+        seen["text"] = text
+        return "It is hard to track money.\n"
+
+    monkeypatch.setattr(cli.click, "edit", fake_edit)
+    result = pet(home, "edit", "budget", "--field", "problem")
+    assert result.exit_code == 0, result.output
+    assert seen["text"] == "<!-- What problem does it solve? -->"
+    text = idea_text(home, "budget-tracker")
+    assert "## Problem\nIt is hard to track money.\n\n## Who it's for" in text
+
+    monkeypatch.setattr(cli.click, "edit", lambda **kwargs: None)
+    assert "no change" in pet(home, "edit", "budget", "--field", "Rough solution").output
+
+    result = pet(home, "edit", "budget", "--field", "effort")
+    assert result.exit_code == 1
+    assert "use pet set ID effort=VALUE" in result.output
+
+
+def test_promote_warns_about_empty_expected_fields(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    assert "warning" not in pet(home, "promote", "budget").output
+    result = pet(home, "promote", "budget", "--no-input")
+    assert result.exit_code == 0
+    assert "sketch → spec" in result.output
+    assert "warning: still empty: Problem, Rough solution" in result.output
+    assert "status: spec" in idea_text(home, "budget-tracker")
+
+
+def test_check_lists_readiness_and_warns(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    home.templates.mkdir()
+    result = pet(home, "check")
+    assert result.exit_code == 0, result.output
+    assert "i budget-tracker (sketch): empty: Problem, Rough solution" in result.output
+    assert "templates/ is no longer used" in result.output
+    assert "1 ideas OK" in result.output
+
+
+def test_stages_shows_fields_from_the_stages_file(home):
+    pet(home, "init")
+    home.stages_file.write_text(
+        '[sketch]\n\n[[sketch.fields]]\nkey = "vibe"\nlabel = "Vibe"\n'
+        'question = "How should it feel?"\nrequired = true\n',
+        encoding="utf-8",
+    )
+    result = pet(home, "stages")
+    assert result.exit_code == 0, result.output
+    assert "thought through for a few minutes" in result.output
+    assert "vibe*" in result.output and "why_now" not in result.output
+    assert "features*, mvp*" in result.output
+
+
+def test_check_fails_on_bad_stages_file(home):
+    pet(home, "init")
+    home.stages_file.write_text("[nope]\n", encoding="utf-8")
+    result = pet(home, "check")
+    assert result.exit_code == 1
+    assert "stages.toml:" in result.output and "unknown stage 'nope'" in result.output
+    assert pet(home, "promote", "x").exit_code == 1
+
+
+def interactive(monkeypatch, answers):
+    """Make the CLI think it runs in a terminal, answering from a script."""
+    prompter = ScriptedPrompter(answers)
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: not no_input)
+    monkeypatch.setattr(cli, "_prompter", lambda: prompter)
+    return prompter
+
+
+def test_new_asks_questions_in_a_terminal(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Old idea", "-t", "money")
+    prompter = interactive(monkeypatch, ["", "Budget tracker", "Track spending.", 4, False])
+    result = pet(home, "new", "-t", "money")
+    assert result.exit_code == 0, result.output
+    assert "budget-tracker" in result.output
+    assert prompter.messages[0] == "A title is needed."
+    methods = [method for method, _, _ in prompter.calls]
+    assert methods == ["text", "text", "text", "scale", "confirm"]  # tags were given
+    text = idea_text(home, "budget-tracker")
+    assert "excitement: 4" in text and "Track spending." in text and "- money" in text
+
+
+def test_new_with_no_input_asks_nothing(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, [])
+    assert pet(home, "new", "Thing", "--no-input").exit_code == 0
+    assert pet(home, "new", "--no-input").exit_code == 1
+
+
+def test_ctrl_c_keeps_answers_and_exits_130(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, ["Track spending.", KeyboardInterrupt()])
+    result = pet(home, "new", "Budget tracker")
+    assert result.exit_code == 130
+    assert "Stopped. Answers so far are saved." in result.output
+    assert "Track spending." in idea_text(home, "budget-tracker")
+
+
+def test_ctrl_c_before_the_title_creates_nothing(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, [KeyboardInterrupt()])
+    assert pet(home, "new").exit_code == 130
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_refine_in_a_terminal(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    interactive(monkeypatch, ["Track spending."])
+    result = pet(home, "refine", "budget", "summary")
+    assert result.exit_code == 0, result.output
+    assert "Track spending." in idea_text(home, "budget-tracker")
+
+    result = pet(home, "refine", "budget", "mvp")
+    assert result.exit_code == 1
+    assert "'mvp' belongs to the spec stage" in result.output
+
+
+def test_promote_in_a_terminal_can_be_cancelled(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    interactive(monkeypatch, ["cancel"])
+    result = pet(home, "promote", "budget")
+    assert result.exit_code == 0 and "Not promoted." in result.output
+    assert "status: sketch" in idea_text(home, "budget-tracker")
+
+
+def test_without_a_terminal_nothing_is_asked(home, monkeypatch):
+    monkeypatch.setattr(cli, "_prompter", lambda: ScriptedPrompter([]))
+    pet(home, "init")
+    result = pet(home, "add", "Budget tracker", "-i")
+    assert result.exit_code == 0
+    assert "note: not a terminal, skipping questions" in result.output
+    assert pet(home, "promote", "budget").exit_code == 0
+    result = pet(home, "refine", "budget")
+    assert result.exit_code == 1
+    assert "refine needs a terminal" in result.output
+
+
+def make_old(home, idea_id):
+    path = home.ideas / f"{idea_id}.md"
+    text = path.read_text(encoding="utf-8")
+    today = dt.date.today().isoformat()
+    path.write_text(text.replace(f"created: {today}", "created: 2020-01-01"), encoding="utf-8")
+
+
+def test_review_without_a_terminal_lists_due_ideas(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "add", "Recipe box")
+    make_old(home, "budget-tracker")
+    result = pet(home, "review")
+    assert result.exit_code == 0, result.output
+    assert "budget-tracker" in result.output and "recipe-box" not in result.output
+    assert "last seen" in result.output and "2020-01-01" in result.output
+    assert "Run pet review in a terminal to go through them." in result.output
+    assert "reviewed:" not in idea_text(home, "budget-tracker")
+
+
+def test_review_list_keeps_last_seen_whole_at_80_columns(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-t", "money", "-t", "finance")
+    make_old(home, "budget-tracker")
+    args = ["--home", str(home.path), "review"]
+    output = runner.invoke(app, args, env={"COLUMNS": "80"}).output
+    assert "2020-01-01" in output
+    assert "created" not in output
+
+
+def test_review_with_nothing_due(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    result = pet(home, "review", "--days", "7")
+    assert result.exit_code == 0
+    assert "Nothing to review. Everything was looked at in the last 7 days." in result.output
+
+
+def test_review_in_a_terminal(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    make_old(home, "budget-tracker")
+    interactive(monkeypatch, ["skip"])
+    result = pet(home, "review")
+    assert result.exit_code == 0, result.output
+    assert "Reviewed 1, 0 left." in result.output
+    assert f"reviewed: {dt.date.today().isoformat()}" in idea_text(home, "budget-tracker")
+
+
+def test_review_ctrl_c_exits_130(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    make_old(home, "budget-tracker")
+    interactive(monkeypatch, [KeyboardInterrupt()])
+    result = pet(home, "review")
+    assert result.exit_code == 130
+    assert "Reviewed 0, 1 left." in result.output
+    assert "Stopped. Answers so far are saved." in result.output
+
+
+def test_bare_pet_without_a_terminal_prints_help(home):
+    result = pet(home)
+    assert result.exit_code == 0
+    assert "Usage" in result.output and "Capture and grow" in result.output
+
+
+def test_bare_pet_in_a_terminal_opens_the_ui(home, monkeypatch):
+    from metapet.tui import PetApp
+
+    opened = []
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: True)
+    monkeypatch.setattr(PetApp, "run", lambda self: opened.append(self))
+    assert pet(home).exit_code == 1  # no store yet
+    pet(home, "init")
+    assert pet(home).exit_code == 0
+    assert pet(home, "ui").exit_code == 0
+    assert len(opened) == 2
+
+
+def test_ui_without_a_terminal_fails(home):
+    pet(home, "init")
+    result = pet(home, "ui")
+    assert result.exit_code == 1
+    assert "needs a terminal" in result.output

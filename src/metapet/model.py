@@ -49,8 +49,10 @@ KNOWN_KEYS = (
     "status",
     "created",
     "updated",
+    "reviewed",
     "tags",
     "excitement",
+    "impact",
     "effort",
     "repo",
     "related",
@@ -70,8 +72,10 @@ class Idea:
     status: Status = Status.SEED
     created: dt.date = field(default_factory=dt.date.today)
     updated: dt.date | None = None
+    reviewed: dt.date | None = None
     tags: list[str] = field(default_factory=list)
     excitement: int | None = None
+    impact: int | None = None
     effort: Effort | None = None
     repo: str | None = None
     related: list[str] = field(default_factory=list)
@@ -112,8 +116,10 @@ class Idea:
                 status=Status(meta.pop("status")),
                 created=_as_date(meta.pop("created")),
                 updated=_as_date(meta.pop("updated", None)),
+                reviewed=_as_date(meta.pop("reviewed", None)),
                 tags=_as_list(meta.pop("tags", None)),
-                excitement=_as_excitement(meta.pop("excitement", None)),
+                excitement=_as_scale("excitement", meta.pop("excitement", None)),
+                impact=_as_scale("impact", meta.pop("impact", None)),
                 effort=_as_effort(meta.pop("effort", None)),
                 repo=meta.pop("repo", None),
                 related=_as_list(meta.pop("related", None)),
@@ -132,6 +138,9 @@ class Idea:
 
     def touch(self) -> None:
         self.updated = dt.date.today()
+
+    def mark_reviewed(self, today: dt.date | None = None) -> None:
+        self.reviewed = today or dt.date.today()
 
 
 def _as_date(value: Any) -> dt.date | None:
@@ -154,10 +163,10 @@ def _as_effort(value: Any) -> Effort | None:
     return Effort(str(value).upper()) if value else None
 
 
-def _as_excitement(value: Any) -> int | None:
+def _as_scale(name: str, value: Any) -> int | None:
     if value is None:
         return None
     number = int(value)
     if not 1 <= number <= 5:
-        raise ValueError(f"excitement must be 1-5, got {number}")
+        raise ValueError(f"{name} must be 1-5, got {number}")
     return number

@@ -1,59 +1,12 @@
-"""Section templates appended to an idea as it matures."""
+"""Moving ideas between stages, and checking which expected fields are still empty."""
 
 from __future__ import annotations
 
-import re
-from importlib import resources
-
+from metapet import fields, sections
 from metapet.model import Idea, Status
-from metapet.paths import DataHome
+from metapet.schema import LIFECYCLE, Field, Schema, Storage
 
-# Which template a status brings in; seeds carry just their one-liner.
-TEMPLATE_FOR = {
-    Status.SKETCH: "sketch",
-    Status.SPEC: "spec",
-    Status.BUILDING: "building",
-    Status.SHIPPED: "retro",
-    Status.SHELVED: "retro",
-}
-LIFECYCLE = [Status.SEED, Status.SKETCH, Status.SPEC, Status.BUILDING, Status.SHIPPED]
-MEANING = {
-    Status.SEED: "a raw thought: a title, maybe a one-liner",
-    Status.SKETCH: "thought through for a few minutes",
-    Status.SPEC: "concrete enough to start building from",
-    Status.BUILDING: "real work has started",
-    Status.SHIPPED: "done and usable",
-    Status.SHELVED: "put aside on purpose, with a reason (from any stage)",
-}
-HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
-
-
-def load(name: str, home: DataHome | None = None) -> str:
-    """A template's text, preferring the user's override in <home>/templates."""
-    if home is not None:
-        override = home.templates / f"{name}.md"
-        if override.is_file():
-            return override.read_text(encoding="utf-8")
-    return resources.files("metapet").joinpath("templates", f"{name}.md").read_text("utf-8")
-
-
-def sections(text: str) -> list[tuple[str, str]]:
-    """Split markdown into (heading, block) pairs at `## ` headings."""
-    matches = list(HEADING.finditer(text))
-    ends = [m.start() for m in matches[1:]] + ([len(text)] if matches else [])
-    return [
-        (m.group(1).strip().lower(), text[m.start() : end].strip())
-        for m, end in zip(matches, ends, strict=True)
-    ]
-
-
-def append_sections(body: str, template: str) -> str:
-    """Append the template's sections that the body doesn't already have."""
-    present = {heading for heading, _ in sections(body)}
-    missing = [block for heading, block in sections(template) if heading not in present]
-    if not missing:
-        return body
-    return "\n\n".join(part for part in [body.strip(), *missing] if part) + "\n"
+__all__ = ["LIFECYCLE", "before", "describe", "gaps", "move", "promote", "statuses_between"]
 
 
 def statuses_between(old: Status, new: Status) -> list[Status]:
@@ -65,26 +18,60 @@ def statuses_between(old: Status, new: Status) -> list[Status]:
     return LIFECYCLE[LIFECYCLE.index(old) + 1 : LIFECYCLE.index(new) + 1]
 
 
-def move(idea: Idea, new: Status, home: DataHome | None = None) -> None:
-    """Change an idea's status, growing its body with each newly reached stage."""
+def before(target: Status) -> Status | None:
+    """The lifecycle stage just before target; None for seed and shelved."""
+    if target not in LIFECYCLE or target == LIFECYCLE[0]:
+        return None
+    return LIFECYCLE[LIFECYCLE.index(target) - 1]
+
+
+def move(idea: Idea, new: Status, schema: Schema) -> None:
+    """Change an idea's status, adding an empty section for each newly reached section field."""
+    body = sections.parse(idea.body)
+    added = False
     for status in statuses_between(idea.status, new):
-        idea.body = append_sections(idea.body, load(TEMPLATE_FOR[status], home))
+        for field in schema.stage(status).fields:
+            if field.storage != Storage.SECTION or sections.find(body, field.matches_heading):
+                continue
+            sections.upsert(
+                body,
+                field.label,
+                fields.placeholder(field),
+                field.matches_heading,
+                schema.section_order,
+            )
+            added = True
+    if added:
+        idea.body = sections.render(body)
     idea.status = new
     idea.touch()
 
 
-def headings(name: str, home: DataHome | None = None) -> list[str]:
-    """A template's section headings, as written."""
-    return [m.group(1).strip() for m in HEADING.finditer(load(name, home))]
+def promote(idea: Idea, target: Status, schema: Schema) -> None:
+    """Move an idea, forgetting the shelved reason when it comes back from the shelf."""
+    old = idea.status
+    move(idea, target, schema)
+    if old == Status.SHELVED and target != Status.SHELVED:
+        idea.shelved_reason = None
 
 
-def describe(home: DataHome | None = None) -> list[tuple[Status, str, list[str]]]:
-    """(status, meaning, sections promote adds) for every stage, in lifecycle order."""
+def gaps(idea: Idea, schema: Schema, upto: Status | None) -> list[Field]:
+    """Required fields of the stages seed..upto that are still empty."""
+    if upto is None or upto not in LIFECYCLE:
+        return []
+    result: list[Field] = []
+    seen: set[str] = set()
+    for status in LIFECYCLE[: LIFECYCLE.index(upto) + 1]:
+        for field in schema.stage(status).fields:
+            if field.required and field.key not in seen and not fields.is_filled(idea, field):
+                result.append(field)
+            seen.add(field.key)
+    return result
+
+
+def describe(schema: Schema) -> list[tuple[Status, str, list[Field]]]:
+    """(status, meaning, fields) for every stage, in lifecycle order."""
     return [
-        (
-            status,
-            MEANING[status],
-            headings(TEMPLATE_FOR[status], home) if status in TEMPLATE_FOR else [],
-        )
+        (status, schema.stage(status).meaning, list(schema.stage(status).fields))
         for status in [*LIFECYCLE, Status.SHELVED]
     ]

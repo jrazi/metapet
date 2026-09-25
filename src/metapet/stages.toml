@@ -1,0 +1,192 @@
+# Stage definitions for metapet.
+# Copy a stage table into <data home>/stages.toml to change it. A stage you define there
+# replaces the built-in stage with the same name; stages you leave out stay as they are.
+
+[seed]
+meaning = "a raw thought: a title, maybe a one-liner"
+
+[[seed.fields]]
+key = "title"
+label = "Title"
+question = "What is the idea, in a few words?"
+required = true
+store = "frontmatter"
+
+[[seed.fields]]
+key = "summary"
+label = "Summary"
+question = "Describe it in one sentence."
+store = "summary"
+
+[[seed.fields]]
+key = "tags"
+label = "Tags"
+question = "Tags?"
+hint = "Comma separated."
+kind = "tags"
+store = "frontmatter"
+
+[[seed.fields]]
+key = "excitement"
+label = "Excitement"
+question = "How excited are you about it?"
+hint = "1 = mildly curious, 5 = you keep thinking about it."
+kind = "scale"
+store = "frontmatter"
+
+[sketch]
+meaning = "thought through for a few minutes"
+
+[[sketch.fields]]
+key = "problem"
+label = "Problem"
+question = "What problem does it solve?"
+hint = "What is annoying, missing or fun here?"
+kind = "long"
+required = true
+
+[[sketch.fields]]
+key = "audience"
+label = "Who it's for"
+question = "Who is it for?"
+hint = "You, friends, a specific group of people?"
+
+[[sketch.fields]]
+key = "solution"
+label = "Rough solution"
+question = "How could it work, roughly?"
+hint = "The shape of the thing, in a few sentences."
+kind = "long"
+required = true
+
+[[sketch.fields]]
+key = "value"
+label = "Value"
+question = "What is it worth if it exists?"
+hint = "Time saved, money, fun, something learned."
+kind = "long"
+
+[[sketch.fields]]
+key = "why_now"
+label = "Why now"
+question = "Why is now a good time for it?"
+aliases = ["Why me / why now"]
+
+[spec]
+meaning = "concrete enough to start building from"
+
+[[spec.fields]]
+key = "features"
+label = "Features"
+question = "What should it do?"
+hint = "One feature per answer."
+kind = "list"
+required = true
+
+[[spec.fields]]
+key = "mvp"
+label = "MVP scope"
+question = "What is the smallest version you would actually use?"
+kind = "long"
+required = true
+
+[[spec.fields]]
+key = "stack"
+label = "Stack"
+question = "What will you build it with?"
+hint = "Languages, frameworks, hosting."
+
+[[spec.fields]]
+key = "risks"
+label = "Risks"
+question = "What could go wrong?"
+hint = "Technical, legal, time, motivation."
+kind = "long"
+
+[[spec.fields]]
+key = "prior_art"
+label = "Prior art"
+question = "What already exists, and why is it not enough?"
+kind = "long"
+
+[[spec.fields]]
+key = "effort"
+label = "Effort"
+question = "How big is it?"
+hint = "S = a weekend, M = a few weekends, L = a month or two, XL = longer."
+kind = "choice"
+choices = ["S", "M", "L", "XL"]
+store = "frontmatter"
+
+[[spec.fields]]
+key = "impact"
+label = "Impact"
+question = "How much would it matter once it exists?"
+hint = "1 = nice to have, 5 = a big difference for you or others."
+kind = "scale"
+store = "frontmatter"
+
+[building]
+meaning = "real work has started"
+
+[[building.fields]]
+key = "repo"
+label = "Repo"
+question = "Where does the code live?"
+hint = "A URL or a local path."
+required = true
+store = "frontmatter"
+
+[[building.fields]]
+key = "next_step"
+label = "Next step"
+question = "What is the next concrete step?"
+
+[[building.fields]]
+key = "log"
+label = "Log"
+question = "Anything to add to the progress log?"
+kind = "list"
+dated = true
+
+[shipped]
+meaning = "done and usable"
+
+[[shipped.fields]]
+key = "retro"
+label = "Retro"
+question = "What worked, what didn't, and what did you learn?"
+kind = "long"
+
+[shelved]
+meaning = "put aside on purpose, with a reason (from any stage)"
+
+[[shelved.fields]]
+key = "retro"
+label = "Retro"
+question = "What worked, what didn't, and what did you learn?"
+kind = "long"
+
+[any]
+meaning = "fields you can fill at any stage"
+
+[[any.fields]]
+key = "notes"
+label = "Notes"
+question = "Anything to note?"
+kind = "list"
+dated = true
+
+[[any.fields]]
+key = "links"
+label = "Links"
+question = "Any useful links?"
+kind = "list"
+
+[[any.fields]]
+key = "related"
+label = "Related ideas"
+question = "Which other ideas is it related to?"
+hint = "Idea ids."
+kind = "list"
+store = "frontmatter"

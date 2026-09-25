@@ -16,8 +16,10 @@ def to_json(ideas: list[Idea]) -> str:
             "status": idea.status.value,
             "created": idea.created.isoformat(),
             "updated": idea.updated.isoformat() if idea.updated else None,
+            "reviewed": idea.reviewed.isoformat() if idea.reviewed else None,
             "tags": idea.tags,
             "excitement": idea.excitement,
+            "impact": idea.impact,
             "effort": idea.effort.value if idea.effort else None,
             "repo": idea.repo,
             "related": idea.related,
@@ -36,11 +38,15 @@ def to_markdown(ideas: list[Idea]) -> str:
         if not group:
             continue
         lines += [f"## {status.value.capitalize()} ({len(group)})", ""]
-        lines += ["| Idea | Tags | Excitement | Effort | Created |", "|---|---|---|---|---|"]
+        lines += [
+            "| Idea | Tags | Excitement | Impact | Effort | Created |",
+            "|---|---|---|---|---|---|",
+        ]
         for idea in group:
             lines.append(
                 f"| [{idea.title}](ideas/{idea.id}.md) | {', '.join(idea.tags)} "
-                f"| {idea.excitement or ''} | {idea.effort.value if idea.effort else ''} "
+                f"| {idea.excitement or ''} | {idea.impact or ''} "
+                f"| {idea.effort.value if idea.effort else ''} "
                 f"| {idea.created} |"
             )
         lines.append("")
