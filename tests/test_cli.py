@@ -30,8 +30,24 @@ def test_capture_browse_and_grow(home, tmp_path):
     assert result.exit_code == 0, result.output
     assert (home.ideas / "spotify-downloader-bot-for-telegram.md").exists()
 
-    result = pet(home, "new", "--no-edit", input="Budget tracker\nTrack stuff\nmoney, cli\n4\nm\n")
+    result = pet(
+        home,
+        "new",
+        "Budget tracker",
+        "-m",
+        "Track stuff",
+        "-t",
+        "money",
+        "-t",
+        "cli",
+        "-x",
+        "4",
+        "--set",
+        "effort=m",
+    )
     assert result.exit_code == 0, result.output
+    budget = (home.ideas / "budget-tracker.md").read_text()
+    assert "excitement: 4" in budget and "effort: M" in budget and "Track stuff" in budget
 
     listing = pet(home, "ls", "--tag", "bot").output
     assert "spotify-downloader" in listing and "budget-tracker" not in listing
@@ -118,6 +134,32 @@ def test_help_explains_the_lifecycle(home):
 
 def idea_text(home, idea_id):
     return (home.ideas / f"{idea_id}.md").read_text(encoding="utf-8")
+
+
+def test_new_needs_a_title(home):
+    pet(home, "init")
+    result = pet(home, "new", "--no-input")
+    assert result.exit_code == 1
+    assert 'a title is required: pet new "TITLE"' in result.output
+
+
+def test_new_rejects_bad_values_without_creating_a_file(home):
+    pet(home, "init")
+    result = pet(home, "new", "Thing", "-x", "9", "--set", "bogus=1")
+    assert result.exit_code == 1
+    assert "excitement must be a number from 1 to 5" in result.output
+    assert "unknown field 'bogus'" in result.output
+    result = pet(home, "new", "Thing", "-x", "3", "--set", "excitement=4")
+    assert result.exit_code == 1 and "both as a flag and with --set" in result.output
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_new_can_fill_later_stage_fields(home):
+    pet(home, "init")
+    assert pet(home, "new", "Thing", "--set", "mvp=Just a script").exit_code == 0
+    text = idea_text(home, "thing")
+    assert "status: seed" in text and "## MVP scope\nJust a script" in text
+    assert "updated:" not in text
 
 
 def test_set_changes_fields_and_tags(home):

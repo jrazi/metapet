@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from metapet import export, fields, paths, schema, scoring, stages, sync
-from metapet.model import Effort, Idea, Status
+from metapet.model import Idea, Status
 from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import IdeaLookupError, Store
 
@@ -275,32 +275,59 @@ def add(
 @app.command()
 def new(
     ctx: typer.Context,
-    edit: Annotated[bool, typer.Option(help="Open the idea in $EDITOR afterwards.")] = True,
+    title: Annotated[str | None, typer.Argument(help="The idea, in a few words.")] = None,
+    summary: Annotated[
+        str | None, typer.Option("--summary", "-m", help="Describe it in one sentence.")
+    ] = None,
+    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Tag (repeatable).")] = None,
+    excitement: Annotated[
+        str | None, typer.Option("--excitement", "-x", help="How excited you are, 1-5.")
+    ] = None,
+    set_: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--set",
+            "-s",
+            metavar="KEY=VALUE",
+            help="Any other field, e.g. --set effort=M (repeatable; see pet set --help).",
+        ),
+    ] = None,
+    no_input: NoInput = False,
 ) -> None:
-    """Capture an idea interactively."""
+    """Capture an idea with its seed fields.
+
+    Fields of later stages can be filled right away with --set.
+    """
     store = _store(ctx)
-    title = typer.prompt("Title")
-    note = typer.prompt("One-liner", default="", show_default=False)
-    tags = typer.prompt("Tags (comma separated)", default="", show_default=False)
-    excitement = typer.prompt(
-        "Excitement 1-5", default="", show_default=False, type=click.Choice(["", *"12345"])
+    idea_schema = _schema(ctx)
+    if not title or not title.strip():
+        _fail('a title is required: pet new "TITLE"')
+    summary_key = next(
+        (f.key for f in idea_schema.all_fields() if f.storage == Storage.SUMMARY), "summary"
     )
-    effort = typer.prompt(
-        "Effort S/M/L/XL",
-        default="",
-        show_default=False,
-        type=click.Choice(["", *[e.value for e in Effort]], case_sensitive=False),
-    )
-    idea = store.create(
-        title,
-        body=note,
-        tags=[t.strip() for t in tags.split(",") if t.strip()],
-        excitement=int(excitement) if excitement else None,
-        effort=Effort(effort.upper()) if effort else None,
-    )
+    flagged = {
+        summary_key: summary,
+        "tags": ",".join(tag) if tag else None,
+        "excitement": excitement,
+    }
+    tokens = [f"{key}={value}" for key, value in flagged.items() if value is not None]
+    try:
+        extra = fields.parse_changes(list(set_ or []))
+        clashes = [
+            c.key
+            for c in extra
+            if c.key.lower().replace("-", "_")
+            in {"title", *(k for k, v in flagged.items() if v is not None)}
+        ]
+        if clashes:
+            raise ValueError(f"'{clashes[0]}' is given both as a flag and with --set")
+        idea = Idea(id=store.unique_id(title), title=title.strip())
+        fields.apply_changes(idea, idea_schema, fields.parse_changes(tokens) + extra)
+    except ValueError as exc:
+        _fail(escape(str(exc)))
+    idea.updated = None  # just created
+    store.save(idea)
     console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
-    if edit:
-        click.edit(filename=str(idea.path))
 
 
 # -- browsing ----------------------------------------------------------------
