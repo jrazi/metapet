@@ -331,3 +331,53 @@ def test_without_a_terminal_nothing_is_asked(home, monkeypatch):
     result = pet(home, "refine", "budget")
     assert result.exit_code == 1
     assert "refine needs a terminal" in result.output
+
+
+def make_old(home, idea_id):
+    path = home.ideas / f"{idea_id}.md"
+    text = path.read_text(encoding="utf-8")
+    today = dt.date.today().isoformat()
+    path.write_text(text.replace(f"created: {today}", "created: 2020-01-01"), encoding="utf-8")
+
+
+def test_review_without_a_terminal_lists_due_ideas(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "add", "Recipe box")
+    make_old(home, "budget-tracker")
+    result = pet(home, "review")
+    assert result.exit_code == 0, result.output
+    assert "budget-tracker" in result.output and "recipe-box" not in result.output
+    assert "last seen" in result.output and "2020-01-01" in result.output
+    assert "Run pet review in a terminal to go through them." in result.output
+    assert "reviewed:" not in idea_text(home, "budget-tracker")
+
+
+def test_review_with_nothing_due(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    result = pet(home, "review", "--days", "7")
+    assert result.exit_code == 0
+    assert "Nothing to review. Everything was looked at in the last 7 days." in result.output
+
+
+def test_review_in_a_terminal(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    make_old(home, "budget-tracker")
+    interactive(monkeypatch, ["skip"])
+    result = pet(home, "review")
+    assert result.exit_code == 0, result.output
+    assert "Reviewed 1, 0 left." in result.output
+    assert f"reviewed: {dt.date.today().isoformat()}" in idea_text(home, "budget-tracker")
+
+
+def test_review_ctrl_c_exits_130(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    make_old(home, "budget-tracker")
+    interactive(monkeypatch, [KeyboardInterrupt()])
+    result = pet(home, "review")
+    assert result.exit_code == 130
+    assert "Reviewed 0, 1 left." in result.output
+    assert "Stopped. Answers so far are saved." in result.output
