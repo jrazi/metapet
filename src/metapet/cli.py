@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import inspect
 import random
 import sys
 from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal, NoReturn, TypeVar
 
@@ -104,7 +106,7 @@ def main(
     ctx: typer.Context,
     home: Annotated[
         str | None,
-        typer.Option("--home", help="Data directory to use (overrides $METAPET_HOME)."),
+        typer.Option("--home", metavar="PATH", help="Data directory to use (overrides $METAPET_HOME)."),
     ] = None,
 ) -> None:
     ctx.obj = paths.resolve(home)
@@ -254,6 +256,14 @@ IdOption = Annotated[
         "hyphens).",
     ),
 ]
+
+class SortKey(StrEnum):
+    CREATED = "created"
+    EXCITEMENT = "excitement"
+    IMPACT = "impact"
+    SCORE = "score"
+    TITLE = "title"
+
 
 NoInput = Annotated[
     bool, typer.Option("--no-input", help="Never ask questions; use only the values given.")
@@ -454,7 +464,7 @@ def init(
         bool, typer.Option("--git", help="Make the store a git repo, for `pet sync` backups.")
     ] = False,
     remote: Annotated[
-        str | None, typer.Option("--remote", help="Git remote URL for backups (implies --git).")
+        str | None, typer.Option("--remote", metavar="URL", help="Git remote URL for backups (implies --git).")
     ] = None,
 ) -> None:
     """Create the idea store."""
@@ -496,8 +506,8 @@ def where(ctx: typer.Context) -> None:
 def add(
     ctx: typer.Context,
     title: Annotated[str, typer.Argument(metavar="TITLE", help=TITLE_HELP)],
-    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Tag (repeatable).")] = None,
-    note: Annotated[str | None, typer.Option("--note", "-m", help="One-line description.")] = None,
+    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", metavar="TAG", help="Tag (repeatable).")] = None,
+    note: Annotated[str | None, typer.Option("--note", "-m", metavar="TEXT", help="One-line description.")] = None,
     interactive: Annotated[
         bool,
         typer.Option(
@@ -551,11 +561,14 @@ def new(
     ctx: typer.Context,
     title: Annotated[str | None, typer.Argument(metavar="[TITLE]", help=TITLE_HELP)] = None,
     summary: Annotated[
-        str | None, typer.Option("--summary", "-m", help="Describe it in one sentence.")
+        str | None, typer.Option("--summary", "-m", metavar="TEXT", help="Describe it in one sentence.")
     ] = None,
-    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Tag (repeatable).")] = None,
+    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", metavar="TAG", help="Tag (repeatable).")] = None,
     excitement: Annotated[
-        str | None, typer.Option("--excitement", "-x", help="How excited you are, 1-5.")
+        int | None,
+        typer.Option(
+            "--excitement", "-x", min=1, max=5, metavar="1-5", help="How excited you are."
+        ),
     ] = None,
     set_: Annotated[
         list[str] | None,
@@ -587,7 +600,7 @@ def new(
     flagged = {
         summary_key: summary,
         "tags": ",".join(fields.normalize_tags(tag, store.all_tags())) if tag else None,
-        "excitement": excitement,
+        "excitement": str(excitement) if excitement is not None else None,
     }
     try:
         extra = fields.parse_changes(list(set_ or []))
@@ -669,12 +682,21 @@ def _shorten_long_title(title: str, summary: str | None, keep: bool) -> tuple[st
 def list_ideas(
     ctx: typer.Context,
     status: Annotated[
-        list[Status] | None, typer.Option("--status", "-s", help="Filter by status (repeatable).")
+        list[Status] | None, typer.Option("--status", "-s", help="Only ideas at this status (repeatable).")
     ] = None,
-    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Filter by tag.")] = None,
+    tag: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--tag",
+            "-t",
+            metavar="TAG",
+            help="Only ideas with this tag (repeat for any of several).",
+        ),
+    ] = None,
     sort: Annotated[
-        str, typer.Option(help="Sort by: created, excitement, impact, score, title.")
-    ] = "created",
+        SortKey,
+        typer.Option(help="Sort order (newest, highest or A-Z first)."),
+    ] = SortKey.CREATED,
     all_: Annotated[
         bool, typer.Option("--all", "-a", help="Include shipped and shelved ideas.")
     ] = False,
@@ -695,21 +717,19 @@ def list_ideas(
         hidden = sum(1 for i in ideas if i.status.terminal)
         ideas = [i for i in ideas if not i.status.terminal]
     keys = {
-        "created": lambda i: (i.created, i.id),
-        "excitement": lambda i: (i.excitement or 0, i.created),
-        "impact": lambda i: (i.impact or 0, i.created),
-        "score": lambda i: (scoring.score(i), i.created),
-        "title": lambda i: i.title.lower(),
+        SortKey.CREATED: lambda i: (i.created, i.id),
+        SortKey.EXCITEMENT: lambda i: (i.excitement or 0, i.created),
+        SortKey.IMPACT: lambda i: (i.impact or 0, i.created),
+        SortKey.SCORE: lambda i: (scoring.score(i), i.created),
+        SortKey.TITLE: lambda i: i.title.lower(),
     }
-    if sort not in keys:
-        _fail(f"unknown sort '{sort}'; choose from: {', '.join(keys)}")
-    ideas.sort(key=keys[sort], reverse=sort != "title")
+    ideas.sort(key=keys[sort], reverse=sort != SortKey.TITLE)
     if not everything:
         console.print('No ideas yet. Capture one with pet add "..."', markup=False)
     elif not ideas:
         console.print("No ideas match these filters." if status or tag else "No live ideas.")
     else:
-        extra = {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == "score" else None
+        extra = {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == SortKey.SCORE else None
         _print_ideas(ideas, extra)
     if hidden and console.is_terminal:
         what = "idea" if hidden == 1 else "ideas"
@@ -803,7 +823,14 @@ def _edit_file(path: Path) -> None:
 def set_(
     ctx: typer.Context,
     idea_id: IdArg,
-    changes: Annotated[list[str], typer.Argument(metavar="CHANGE...", show_default=False)],
+    changes: Annotated[
+        list[str],
+        typer.Argument(
+            metavar="CHANGE...",
+            help="key=value, +tag or -tag; see above.",
+            show_default=False,
+        ),
+    ],
 ) -> None:
     store = _store(ctx)
     idea = _find(store, idea_id)
@@ -823,7 +850,9 @@ def set_(
 def note(
     ctx: typer.Context,
     idea_id: IdArg,
-    text: Annotated[str, typer.Argument(help="The note; it is dated and added to Notes.")],
+    text: Annotated[
+        str, typer.Argument(metavar="TEXT", help="The note; it is dated and added to Notes.")
+    ],
 ) -> None:
     """Add a dated line to an idea's Notes section."""
     store = _store(ctx)
@@ -962,7 +991,7 @@ def refine(
 ) -> None:
     """Answer an idea's questions again, or fill the ones you skipped.
 
-    Without FIELD, pick fields from a list ([x] filled, [ ] empty) until you choose Done. Only
+    Without FIELD, pick fields from a list (✓ answered, · empty, * expected) until you choose Done. Only
     fields of the idea's stage and the stages before it are offered. The stage does not
     change. Needs a terminal.
     """
@@ -987,7 +1016,7 @@ def refine(
 def shelve(
     ctx: typer.Context,
     idea_id: IdArg,
-    reason: Annotated[str, typer.Argument(help="Why you're putting it aside.")],
+    reason: Annotated[str, typer.Argument(metavar="REASON", help="Why you're putting it aside.")],
 ) -> None:
     """Shelve an idea, keeping the reason for future you.
 
@@ -1024,7 +1053,7 @@ def review(
     ctx: typer.Context,
     days: Annotated[
         int,
-        typer.Option("--days", "-d", min=0, help="Ideas not looked at for this many days."),
+        typer.Option("--days", "-d", min=0, metavar="N", help="Ideas not looked at for this many days."),
     ] = 14,
     no_input: NoInput = False,
 ) -> None:
@@ -1114,7 +1143,7 @@ app.command("find", hidden=True)(search)
 def next_(
     ctx: typer.Context,
     count: Annotated[
-        int, typer.Option("--count", "-n", min=1, help="How many to suggest.")
+        int, typer.Option("--count", "-n", min=1, metavar="N", help="How many to suggest.")
     ] = 3,
 ) -> None:
     """Suggest what to work on next.
@@ -1267,7 +1296,7 @@ def _count_word(n: int) -> str:
 @app.command("sync")
 def sync_(
     ctx: typer.Context,
-    message: Annotated[str | None, typer.Option("--message", "-m", help="Commit message.")] = None,
+    message: Annotated[str | None, typer.Option("--message", "-m", metavar="TEXT", help="Commit message.")] = None,
 ) -> None:
     """Back up the store: commit, pull --rebase, push (if it's a git repo)."""
     store = _store(ctx)
@@ -1310,3 +1339,14 @@ def export_(
             continue
         target.write_text(render(), encoding="utf-8")
         console.print(f"[green]✓[/] wrote {escape(str(target))}", soft_wrap=True, highlight=False)
+
+
+def _one_line_paragraphs(text: str) -> str:
+    """Help text with each paragraph on one line, so the terminal can wrap it evenly."""
+    paragraphs = inspect.cleandoc(text).split("\n\n")
+    return "\n\n".join(" ".join(paragraph.split()) for paragraph in paragraphs)
+
+
+for _info in app.registered_commands:
+    if _info.help is None and _info.callback is not None and _info.callback.__doc__:
+        _info.help = _one_line_paragraphs(_info.callback.__doc__)

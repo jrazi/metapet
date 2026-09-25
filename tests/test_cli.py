@@ -180,7 +180,7 @@ def test_new_needs_a_title(home):
 
 def test_new_rejects_bad_values_without_creating_a_file(home):
     pet(home, "init")
-    result = pet(home, "new", "Thing", "-x", "9", "--set", "bogus=1")
+    result = pet(home, "new", "Thing", "--set", "excitement=9", "--set", "bogus=1")
     assert result.exit_code == 1
     assert "excitement must be a number from 1 to 5" in result.output
     assert "unknown field 'bogus'" in result.output
@@ -984,3 +984,27 @@ def test_stats_labels(home):
 
 def test_last_months():
     assert cli._last_months(dt.date(2026, 2, 5), 3) == ["2025-12", "2026-01", "2026-02"]
+
+
+def test_docstrings_have_one_line_paragraphs():
+    lifecycle = set(cli.LIFECYCLE_HELP.split("\n\n"))
+    for info in app.registered_commands:
+        help_text = info.help or ""
+        assert help_text, info.name or info.callback.__name__
+        for paragraph in help_text.split("\n\n"):
+            if paragraph in lifecycle:
+                continue
+            assert "\n" not in paragraph, (info.name, paragraph)
+
+
+def test_new_excitement_is_range_checked(home):
+    pet(home, "init")
+    result = pet(home, "new", "x", "-x", "9")
+    assert result.exit_code == 2
+    assert "1<=x<=5" in result.output or "range" in result.output
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_ls_help_lists_sort_choices():
+    output = runner.invoke(app, ["ls", "--help"], env={"COLUMNS": "200"}).output
+    assert "created" in output and "excitement" in output and "score" in output
