@@ -21,7 +21,7 @@ from metapet.views import Card
 
 SKIP = "Skip"
 QMARK_STYLE = "#5f819d"  # the colour questionary uses for the ? before a question
-SCALE_KEYS = "(1-5, or arrows and Enter)"
+SCALE_KEYS = "(press 1-5 or use the arrows, then Enter)"
 LONG_SKIP = "Enter skips; e opens your editor"
 LONG_KEEP = "Enter keeps the current answer; e opens your editor"
 LONG_SKIP_NO_EDITOR = "Enter skips"
