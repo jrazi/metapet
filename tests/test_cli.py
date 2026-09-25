@@ -837,3 +837,15 @@ def test_key_heading_is_not_empty(home):
     path = home.ideas / "budget-tracker.md"
     path.write_text(path.read_text().replace("## Rough solution\n<!--", "## solution\nA CLI\n<!--"))
     assert "Rough solution" not in pet(home, "check").output
+
+
+def test_edit_field_twice_does_not_duplicate_heading(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Chess")
+    pet(home, "promote", "chess")
+    monkeypatch.setattr(cli.click, "edit", lambda **kwargs: "Score one\n\n## Stretch\nELO\n")
+    result = pet(home, "edit", "chess", "--field", "problem")
+    assert "note: ## headings inside a field were changed to ###" in result.output
+    pet(home, "edit", "chess", "--field", "problem")
+    text = idea_text(home, "chess")
+    assert "\n## Stretch" not in text and text.count("### Stretch") == 1

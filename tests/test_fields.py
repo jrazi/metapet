@@ -211,3 +211,11 @@ def test_normalize_tags():
         "telegram",
         "a b",
     ]
+
+
+def test_put_text_demotes_level_two_headings():
+    idea = Idea(id="x", title="X", body="## Problem\nold\n\n## Value\nv\n")
+    changed = fields.put_text(idea, field("problem"), "Score one\n\n## Stretch\nELO", S.section_order)
+    assert changed is True
+    assert "## Problem\nScore one\n\n### Stretch\nELO\n\n## Value\nv" in idea.body
+    assert fields.put_text(idea, field("problem"), "plain\n### ok", S.section_order) is False

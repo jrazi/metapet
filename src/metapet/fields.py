@@ -92,14 +92,26 @@ def add_items(idea: Idea, field: Field, values: list[str], order: Order) -> None
     put_text(idea, field, sections.extend_items(raw(idea, field), values), order)
 
 
-def put_text(idea: Idea, field: Field, text: str, order: Order) -> None:
-    """Write raw Markdown as a summary or section field's content."""
+def put_text(idea: Idea, field: Field, text: str, order: Order) -> bool:
+    """Write raw Markdown as a summary or section field's content.
+
+    A `## ` heading would start a new section, so inside a field it becomes `### `.
+    Returns True when that happened.
+    """
+    text, changed = demote_headings(text)
     body = sections.parse(idea.body)
     if field.storage == Storage.SUMMARY:
         body.preamble = text.strip()
     else:
         sections.upsert(body, field.label, text, field.matches_heading, order)
     idea.body = sections.render(body)
+    return changed
+
+
+def demote_headings(text: str) -> tuple[str, bool]:
+    """Turn `## ` headings into `### ` so the text stays in one section."""
+    demoted, count = sections.HEADING.subn(lambda m: "#" + m.group(0), text)
+    return demoted, count > 0
 
 
 def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:

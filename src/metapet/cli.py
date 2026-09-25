@@ -237,6 +237,7 @@ def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     ]
 
 
+HEADINGS_NOTE = "## headings inside a field were changed to ###"
 TITLE_HELP = "Short name for the idea, a few words (the id is made from it)."
 
 Verbose = Annotated[
@@ -737,10 +738,12 @@ def edit(
     if edited is None or edited.strip() == current.strip():
         console.print(f"{escape(idea.id)}: no change")
         return
-    fields.put_text(idea, field, edited, idea_schema.section_order)
+    demoted = fields.put_text(idea, field, edited, idea_schema.section_order)
     idea.touch()
     store.save(idea)
     console.print(f"{escape(idea.id)}: {escape(field.label)} updated")
+    if demoted:
+        err.print(f"note: {HEADINGS_NOTE}", markup=False)
 
 
 def _editor(**kwargs) -> str | None:
