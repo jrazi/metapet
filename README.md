@@ -148,6 +148,7 @@ reports mistakes in your file. The old `templates/` folder is no longer used.
 | `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
 | `pet shelve ID REASON` | Park an idea, remembering why |
 | `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
+| `pet ui` · `pet` | Browse and change ideas in a full-screen view (bare `pet` outside a terminal prints help) |
 | `pet search TEXT` | Search titles, tags and bodies |
 | `pet next [-n N]` | Suggest what to build next |
 | `pet random` | Resurface a forgotten seed or sketch |
@@ -176,6 +177,27 @@ An idea counts as looked at when it was created, changed or reviewed; the date o
 the last review is kept in the `reviewed` key. For each idea you can promote it,
 refine it, add a note, set its excitement, shelve it, skip it or quit. Anything but
 quit marks the idea as reviewed. Outside a terminal it only lists the ideas.
+
+### Full-screen view
+
+`pet ui`, or `pet` on its own in a terminal, opens a list of ideas with a preview of
+the selected one. Keys:
+
+| Key | Action |
+|---|---|
+| `/` | Filter: words, `status:spec`, `tag:cli` (Enter goes back to the list, Escape clears) |
+| `a` | Add an idea |
+| `p` | Promote to the next stage |
+| `r` | Refine: pick fields to answer |
+| `n` | Add a note |
+| `s` | Shelve, with a reason |
+| `e` | Open the file in `$EDITOR` |
+| `x` | Set excitement (1-5) |
+| `q` | Quit |
+
+Add, promote and refine ask the same questions as the commands of the same name;
+the view steps aside while they run and comes back afterwards. Shipped and shelved
+ideas are hidden unless the filter has a `status:` word.
 
 ## Backing up your ideas
 
