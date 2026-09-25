@@ -1,10 +1,26 @@
 [project]
 name = "metapet"
 version = "0.1.0"
-description = "A tiny CLI for capturing and growing pet-project ideas"
+description = "A small command-line tool for keeping pet-project ideas as Markdown files."
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Javad Razi" }]
 requires-python = ">=3.11"
+keywords = ["cli", "ideas", "markdown", "notes", "side-projects"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Utilities",
+]
 dependencies = [
     "anyascii>=0.3",
     "click>=8.1",
@@ -17,6 +33,12 @@ dependencies = [
     "textual>=8.0",
     "typer>=0.16",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jrazi/metapet"
+Repository = "https://github.com/jrazi/metapet"
+Issues = "https://github.com/jrazi/metapet/issues"
+Changelog = "https://github.com/jrazi/metapet/blob/main/CHANGELOG.md"
 
 [project.scripts]
 pet = "metapet.cli:app"
