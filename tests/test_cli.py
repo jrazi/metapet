@@ -1,3 +1,4 @@
+import datetime as dt
 import json
 
 from typer.testing import CliRunner
@@ -117,6 +118,64 @@ def test_help_explains_the_lifecycle(home):
 
 def idea_text(home, idea_id):
     return (home.ideas / f"{idea_id}.md").read_text(encoding="utf-8")
+
+
+def test_set_changes_fields_and_tags(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-t", "old", "-t", "keep")
+    result = pet(home, "set", "budget", "excitement=4", "+cli", "-old", "features=a", "features=b")
+    assert result.exit_code == 0, result.output
+    assert "budget-tracker: excitement 4, features a, b, +cli, -old" in result.output
+    text = idea_text(home, "budget-tracker")
+    assert "- keep\n- cli" in text and "## Features\n- a\n- b" in text
+    assert pet(home, "set", "budget", "--", "-keep").exit_code == 0
+    assert "keep" not in idea_text(home, "budget-tracker")
+
+
+def test_set_with_a_bad_key_leaves_the_file_unchanged(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    before = idea_text(home, "budget-tracker")
+    result = pet(home, "set", "budget", "excitement=4", "nope=1")
+    assert result.exit_code == 1
+    assert "unknown field 'nope'" in result.output
+    assert idea_text(home, "budget-tracker") == before
+
+
+def test_note_appends_a_dated_line(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-m", "Track stuff")
+    assert pet(home, "note", "budget", "first\nthought").output.strip() == "budget-tracker: noted"
+    pet(home, "note", "budget", "second")
+    today = dt.date.today().isoformat()
+    assert f"## Notes\n- {today}: first thought\n- {today}: second" in idea_text(
+        home, "budget-tracker"
+    )
+
+
+def test_edit_one_field(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    seen = {}
+
+    def fake_edit(text=None, **kwargs):
+        seen["text"] = text
+        return "It is hard to track money.\n"
+
+    monkeypatch.setattr(cli.click, "edit", fake_edit)
+    result = pet(home, "edit", "budget", "--field", "problem")
+    assert result.exit_code == 0, result.output
+    assert seen["text"] == "<!-- What problem does it solve? -->"
+    text = idea_text(home, "budget-tracker")
+    assert "## Problem\nIt is hard to track money.\n\n## Who it's for" in text
+
+    monkeypatch.setattr(cli.click, "edit", lambda **kwargs: None)
+    assert "no change" in pet(home, "edit", "budget", "--field", "Rough solution").output
+
+    result = pet(home, "edit", "budget", "--field", "effort")
+    assert result.exit_code == 1
+    assert "use pet set ID effort=VALUE" in result.output
 
 
 def test_promote_warns_about_empty_expected_fields(home):

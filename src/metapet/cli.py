@@ -15,9 +15,9 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from metapet import export, paths, schema, scoring, stages, sync
+from metapet import export, fields, paths, schema, scoring, stages, sync
 from metapet.model import Effort, Idea, Status
-from metapet.schema import Schema, SchemaError
+from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import IdeaLookupError, Store
 
 
@@ -355,10 +355,84 @@ def show(ctx: typer.Context, idea_id: IdArg) -> None:
 
 
 @app.command()
-def edit(ctx: typer.Context, idea_id: IdArg) -> None:
-    """Open an idea in $EDITOR."""
-    idea = _find(_store(ctx), idea_id)
-    click.edit(filename=str(idea.path))
+def edit(
+    ctx: typer.Context,
+    idea_id: IdArg,
+    field_name: Annotated[
+        str | None,
+        typer.Option(
+            "--field", "-f", metavar="FIELD", help="Edit only this field (key or heading)."
+        ),
+    ] = None,
+) -> None:
+    """Open an idea in $EDITOR, or just one of its fields with --field."""
+    store = _store(ctx)
+    idea = _find(store, idea_id)
+    if field_name is None:
+        click.edit(filename=str(idea.path))
+        return
+    idea_schema = _schema(ctx)
+    try:
+        field = idea_schema.field(field_name)
+    except KeyError:
+        known = ", ".join(f.key for f in idea_schema.all_fields())
+        _fail(f"unknown field '{escape(field_name)}'; known fields: {known}")
+    if field.storage == Storage.FRONTMATTER:
+        _fail(f"'{field.key}' is stored in the frontmatter; use pet set ID {field.key}=VALUE")
+    current = fields.raw(idea, field)
+    edited = click.edit(text=current, extension=".md")
+    if edited is None or edited.strip() == current.strip():
+        console.print(f"{idea.id}: no change")
+        return
+    fields.put_text(idea, field, edited, idea_schema.section_order)
+    idea.touch()
+    store.save(idea)
+    console.print(f"{idea.id}: {escape(field.label)} updated")
+
+
+@app.command(
+    "set",
+    context_settings={"ignore_unknown_options": True},
+    help="Change fields without any questions.\n\n"
+    "Each CHANGE is key=value, +tag or -tag, for example: pet set ID excitement=4 effort=S +cli "
+    "-old. Keys are the field keys listed in pet --help. An empty value clears a field "
+    "(summary=). tags=a,b replaces all tags. For a list field, repeat the key, one item "
+    "each: features=search features=export. If a -tag is taken as an option, put -- before "
+    "the changes.",
+)
+def set_(
+    ctx: typer.Context,
+    idea_id: IdArg,
+    changes: Annotated[list[str], typer.Argument(metavar="CHANGE...", show_default=False)],
+) -> None:
+    store = _store(ctx)
+    idea = _find(store, idea_id)
+    try:
+        done = fields.apply_changes(idea, _schema(ctx), fields.parse_changes(changes))
+    except ValueError as exc:
+        _fail(escape(str(exc)))
+    if not done:
+        console.print(f"{idea.id}: no change")
+        return
+    store.save(idea)
+    console.print(f"{idea.id}: {escape(', '.join(done))}")
+
+
+@app.command()
+def note(
+    ctx: typer.Context,
+    idea_id: IdArg,
+    text: Annotated[str, typer.Argument(help="The note; it is dated and added to Notes.")],
+) -> None:
+    """Add a dated line to an idea's Notes section."""
+    store = _store(ctx)
+    idea = _find(store, idea_id)
+    try:
+        fields.add_note(idea, _schema(ctx), text)
+    except ValueError as exc:
+        _fail(str(exc))
+    store.save(idea)
+    console.print(f"{idea.id}: noted")
 
 
 # -- lifecycle ---------------------------------------------------------------
