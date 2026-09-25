@@ -17,6 +17,14 @@ TEMPLATE_FOR = {
     Status.SHELVED: "retro",
 }
 LIFECYCLE = [Status.SEED, Status.SKETCH, Status.SPEC, Status.BUILDING, Status.SHIPPED]
+MEANING = {
+    Status.SEED: "a raw thought: a title, maybe a one-liner",
+    Status.SKETCH: "thought through for a few minutes",
+    Status.SPEC: "concrete enough to start building from",
+    Status.BUILDING: "real work has started",
+    Status.SHIPPED: "done and usable",
+    Status.SHELVED: "put aside on purpose, with a reason (from any stage)",
+}
 HEADING = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 
@@ -63,3 +71,20 @@ def move(idea: Idea, new: Status, home: DataHome | None = None) -> None:
         idea.body = append_sections(idea.body, load(TEMPLATE_FOR[status], home))
     idea.status = new
     idea.touch()
+
+
+def headings(name: str, home: DataHome | None = None) -> list[str]:
+    """A template's section headings, as written."""
+    return [m.group(1).strip() for m in HEADING.finditer(load(name, home))]
+
+
+def describe(home: DataHome | None = None) -> list[tuple[Status, str, list[str]]]:
+    """(status, meaning, sections promote adds) for every stage, in lifecycle order."""
+    return [
+        (
+            status,
+            MEANING[status],
+            headings(TEMPLATE_FOR[status], home) if status in TEMPLATE_FOR else [],
+        )
+        for status in [*LIFECYCLE, Status.SHELVED]
+    ]
