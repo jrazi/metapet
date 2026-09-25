@@ -95,11 +95,13 @@ Fields marked * are expected before moving on:
 `pet promote` moves an idea forward and adds an empty section, with the question as
 an HTML comment, for each section field of the new stage. It never touches what you
 have already written and skips sections you already have. Every field can be left
-empty: if an expected field of an earlier stage is empty, promote prints a warning
-and moves the idea anyway. `pet check` lists the empty expected fields of every idea.
+empty: if an expected field of an earlier stage is empty, promote warns and moves the
+idea anyway. In a terminal it first offers to fill those fields, then asks the
+questions of the new stage; any question can be skipped. `pet check` lists the empty
+expected fields of every idea.
 
-Fill fields with `pet set ID KEY=VALUE`, `pet note ID TEXT` or
-`pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name,
+Fill fields by answering questions with `pet refine ID`, with `pet set ID KEY=VALUE`,
+`pet note ID TEXT` or `pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name,
 ignoring case, so files written by older versions keep working.
 
 ### Changing the stages
@@ -135,14 +137,15 @@ reports mistakes in your file. The old `templates/` folder is no longer used.
 | Command | What it does |
 |---|---|
 | `pet init [--local] [--git] [--remote URL]` | Create the store, optionally as a git repo |
-| `pet add TITLE [-t TAG]… [-m NOTE]` | Capture a seed instantly |
-| `pet new TITLE [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]…` | Capture an idea with its seed fields (and any others with `--set`) |
+| `pet add TITLE [-t TAG]… [-m NOTE] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
+| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
 | `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved) |
 | `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment |
 | `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
 | `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields; an empty value clears one |
 | `pet note ID TEXT` | Add a dated line to the Notes section |
-| `pet promote ID [--to STATUS] [--no-input]` | Advance the lifecycle; warns about empty expected fields |
+| `pet promote ID [--to STATUS] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
+| `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
 | `pet shelve ID REASON` | Park an idea, remembering why |
 | `pet search TEXT` | Search titles, tags and bodies |
 | `pet next [-n N]` | Suggest what to build next |
@@ -152,6 +155,12 @@ reports mistakes in your file. The old `templates/` folder is no longer used.
 | `pet where` | Show the data directory in use |
 | `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |
 | `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump |
+
+`new`, `add -i`, `promote` and `refine` ask questions only when run in a terminal;
+`--no-input` turns the questions off, and outside a terminal they use only the values
+you give. Press Enter to skip a question and keep the current value; clear a value
+with `pet set ID KEY=`. Every answer is saved right away, so Ctrl-C keeps the answers
+given so far.
 
 ### How `next` ranks ideas
 
