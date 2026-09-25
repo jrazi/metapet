@@ -260,7 +260,7 @@ def list_ideas(
         _fail(f"unknown sort '{sort}'; choose from: {', '.join(keys)}")
     ideas.sort(key=keys[sort], reverse=sort != "title")
     if not ideas:
-        console.print("[dim]No ideas match. Capture one with[/] pet add \"...\"")
+        console.print('[dim]No ideas match. Capture one with[/] pet add "..."')
         return
     console.print(_ideas_table(ideas))
 
@@ -348,7 +348,7 @@ def next_(
     """Suggest what to work on: excited, cheap, further along, long-waiting first."""
     ranked = scoring.rank(_store(ctx).all())[:count]
     if not ranked:
-        console.print("[dim]No live ideas. Capture one with[/] pet add \"...\"")
+        console.print('[dim]No live ideas. Capture one with[/] pet add "..."')
         return
     ideas = [idea for idea, _ in ranked]
     console.print(_ideas_table(ideas, {"score": [f"{value:.2f}" for _, value in ranked]}))

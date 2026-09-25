@@ -41,7 +41,9 @@ def test_round_trip_preserves_fields_and_unknown_keys(store):
 
 def test_frontmatter_key_order_is_stable(store):
     idea = store.create("Ordered", tags=["x"], excitement=2)
-    keys = [line.split(":")[0] for line in idea.path.read_text().split("---")[1].strip().splitlines()]
+    keys = [
+        line.split(":")[0] for line in idea.path.read_text().split("---")[1].strip().splitlines()
+    ]
     assert keys[:4] == ["id", "title", "status", "created"]
 
 

@@ -22,7 +22,9 @@ def test_capture_browse_and_grow(home, tmp_path):
     assert pet(home, "init").exit_code == 0
     assert pet(home, "where").output.startswith(str(home.path))
 
-    result = pet(home, "add", "Spotify downloader bot for Telegram", "-t", "bot", "-m", "Links in, MP3 out.")
+    result = pet(
+        home, "add", "Spotify downloader bot for Telegram", "-t", "bot", "-m", "Links in, MP3 out."
+    )
     assert result.exit_code == 0, result.output
     assert (home.ideas / "spotify-downloader-bot-for-telegram.md").exists()
 
