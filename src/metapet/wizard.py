@@ -157,6 +157,8 @@ def promote(s: Session, idea: Idea, target: Status, *, ask_about_gaps: bool = Tr
         return True
     _start(s, idea)
     gaps = stages.gaps(idea, s.schema, stages.before(target))
+    # Fields already asked about in the gap step are not asked again below.
+    answered: set[str] = set()
     if gaps:
         empty = ", ".join(f"{f.label} ({f.stage})" for f in gaps)
         if ask_about_gaps:
@@ -169,17 +171,19 @@ def promote(s: Session, idea: Idea, target: Status, *, ask_about_gaps: bool = Tr
                 return False
             if action == "fill":
                 ask_fields(s, idea, gaps)
+                answered = {f.key for f in gaps}
         else:
             s.prompter.message(f"Warning: still empty: {empty}")
     stages.promote(idea, target, s.schema)
     s.save(idea)
     for status in reached:
         stage = s.schema.stage(status)
-        if not stage.fields:
+        to_ask = [f for f in stage.fields if f.key not in answered]
+        if not to_ask:
             continue
         show_card(s, idea)
         s.prompter.message(f"{status.value}: {stage.meaning}")
-        ask_fields(s, idea, list(stage.fields))
+        ask_fields(s, idea, to_ask)
     return True
 
 

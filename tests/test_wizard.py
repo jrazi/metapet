@@ -116,6 +116,17 @@ def test_promote_can_fill_gaps_first(store):
     assert asked(p)[1:3] == ["What problem does it solve?", "How could it work, roughly?"]
 
 
+def test_filled_gaps_are_not_asked_again_in_a_reached_stage(store):
+    idea = store.create("Budget tracker")
+    s, p = session(store, ["fill", "Money leaks.", "A small CLI.", *[None] * 20])
+    assert wizard.promote(s, idea, Status.SPEC) is True
+    questions = asked(p)
+    assert questions.count("What problem does it solve?") == 1
+    assert questions.count("How could it work, roughly?") == 1
+    saved = on_disk(store, idea)
+    assert "## Problem\nMoney leaks." in saved.body
+
+
 def test_promote_prefills_current_values(store):
     idea = sketch_idea(store, problem="P", solution="S", mvp="Just a script", effort="M")
     s, p = session(store, [None] * SPEC_QUESTIONS)
