@@ -169,3 +169,9 @@ def test_add_note():
     assert idea.body.endswith("## Notes\n- 2026-01-02: first second\n- 2026-01-03: again\n")
     with pytest.raises(ValueError):
         fields.add_note(idea, S, "  ")
+
+
+def test_set_title_collapses_whitespace():
+    idea = Idea(id="x", title="X")
+    apply(idea, "title=a   b")
+    assert idea.title == "a b"

@@ -111,3 +111,16 @@ def test_all_tags(store):
     store.create("One", tags=["cli", "Bot"])
     store.create("Two", tags=["CLI", "art"])
     assert store.all_tags() == ["art", "Bot", "cli"]
+
+
+@pytest.mark.parametrize("title", ["", "   ", "\n"])
+def test_create_rejects_blank_title(store, title):
+    with pytest.raises(ValueError, match="a title is required"):
+        store.create(title)
+    assert list(store.home.ideas.iterdir()) == []
+
+
+def test_create_collapses_whitespace(store):
+    idea = store.create("Budget  Tracker!\n")
+    assert idea.title == "Budget Tracker!"
+    assert "title: Budget Tracker!" in idea.path.read_text()

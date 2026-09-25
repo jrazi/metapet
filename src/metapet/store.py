@@ -7,7 +7,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-from metapet.model import Idea, IdeaError
+from metapet.model import Idea, IdeaError, clean_title
 from metapet.paths import DataHome
 
 
@@ -99,7 +99,8 @@ class Store:
 
     def create(self, title: str, **fields) -> Idea:
         self.require()
-        idea = Idea(id=self.unique_id(title), title=title.strip(), **fields)
+        title = clean_title(title)
+        idea = Idea(id=self.unique_id(title), title=title, **fields)
         self.save(idea)
         return idea
 

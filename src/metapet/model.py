@@ -65,6 +65,14 @@ class IdeaError(ValueError):
     """Raised when an idea file cannot be parsed into a valid idea."""
 
 
+def clean_title(text: str) -> str:
+    """The title with every run of whitespace made one space; ValueError when empty."""
+    title = " ".join(str(text).split())
+    if not title:
+        raise ValueError("a title is required")
+    return title
+
+
 @dataclass
 class Idea:
     id: str

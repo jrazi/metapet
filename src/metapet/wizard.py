@@ -115,7 +115,7 @@ def ask_title(s: Session) -> str:
     except KeyError:
         question = TITLE_QUESTION
     while True:
-        title = (s.prompter.text(question) or "").strip()
+        title = " ".join((s.prompter.text(question) or "").split())
         if title:
             return title
         s.prompter.message("A title is needed.")

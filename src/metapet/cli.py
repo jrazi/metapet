@@ -21,7 +21,7 @@ from rich.text import Text
 
 from metapet import export, fields, paths, schema, scoring, stages, sync, wizard
 from metapet import review as review_
-from metapet.model import Idea, Status
+from metapet.model import Idea, Status, clean_title
 from metapet.prompter import Prompter
 from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import IdeaLookupError, Store
@@ -343,7 +343,10 @@ def add(
     """
     store = _store(ctx)
     idea_schema = _schema(ctx) if interactive else None
-    idea = store.create(title, tags=list(tag or []), body=note or "")
+    try:
+        idea = store.create(title, tags=list(tag or []), body=note or "")
+    except ValueError:
+        _fail('a title is required: pet add "TITLE"')
     console.print(f"[green]+[/] {escape(idea.id)}  [dim]{escape(str(idea.path))}[/]", soft_wrap=True)
     if idea_schema is None:
         return
@@ -420,7 +423,8 @@ def new(
         ]
         if clashes:
             raise ValueError(f"'{clashes[0]}' is given both as a flag and with --set")
-        idea = Idea(id=store.unique_id(title), title=title.strip())
+        title = clean_title(title)
+        idea = Idea(id=store.unique_id(title), title=title)
         fields.apply_changes(idea, idea_schema, fields.parse_changes(tokens) + extra)
     except ValueError as exc:
         _fail(escape(str(exc)))

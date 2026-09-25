@@ -453,3 +453,12 @@ def test_brackets_in_titles_and_tags_are_shown_literally(home):
     assert "Todo [bold] app" in outputs["show todo"] and "[red]" in outputs["show todo"]
     assert "[red]" in outputs["search todo"]
     assert "[red] 1" in outputs["stats "]
+
+
+def test_add_rejects_blank_title(home):
+    pet(home, "init")
+    for title in ("", "   "):
+        result = pet(home, "add", title)
+        assert result.exit_code == 1
+        assert 'a title is required: pet add "TITLE"' in result.output
+    assert list(home.ideas.iterdir()) == []

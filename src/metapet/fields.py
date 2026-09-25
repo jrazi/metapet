@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from metapet import sections
-from metapet.model import KNOWN_KEYS, Effort, Idea
+from metapet.model import KNOWN_KEYS, Effort, Idea, clean_title
 from metapet.schema import Field, Kind, Schema, Storage
 
 Value = str | int | list[str] | None
@@ -104,8 +104,11 @@ def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:
         value = Effort(str(value).upper()) if value else None
     elif field.key in ("tags", "related"):
         value = list(value or [])
-    elif field.key == "title" and not value:
-        raise ValueError("title cannot be empty")
+    elif field.key == "title":
+        try:
+            value = clean_title(str(value or ""))
+        except ValueError:
+            raise ValueError("title cannot be empty") from None
     setattr(idea, field.key, value)
 
 
