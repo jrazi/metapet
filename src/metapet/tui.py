@@ -29,6 +29,9 @@ from metapet.store import BrokenFile, Store
 
 EMPTY_STORE = "No ideas yet. Press a to add one."
 NOTICE_SECONDS = 3
+TITLE_MIN = 10
+TITLE_DEFAULT = 40  # before the table has a size
+SCROLLBAR = 2
 NO_MATCH = "No ideas match the filter."
 UNREADABLE = "unreadable"
 FIX_FIRST = "Fix this file first (press e)."
@@ -41,6 +44,17 @@ STATUS_STYLE = {
     Status.SHIPPED: "bold yellow",
     Status.SHELVED: "dim",
 }
+
+
+def _mtime(idea: Idea) -> float:
+    try:
+        return idea.path.stat().st_mtime if idea.path else 0.0
+    except OSError:
+        return 0.0
+
+
+def _status_label(item: Idea | BrokenFile) -> str:
+    return UNREADABLE if isinstance(item, BrokenFile) else item.status.value
 
 
 def _key(item: Idea | BrokenFile) -> str:
@@ -184,9 +198,12 @@ class PetApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.table.add_columns("id", "title", "status", "exc", "imp", "effort")
         self.reload()
         self.table.focus()
+
+    def on_resize(self) -> None:
+        # The table has its new size only after the next refresh.
+        self.call_after_refresh(self.fill_table)
 
     @property
     def table(self) -> DataTable:
@@ -210,32 +227,42 @@ class PetApp(App[None]):
                 severity="warning",
             )
         self.broken_files = broken
-        self.ideas = sorted(ideas, key=lambda i: (i.created, i.id), reverse=True)
+        # Newest first; among ideas created the same day, the last one changed first.
+        self.ideas = sorted(ideas, key=lambda i: (i.created, _mtime(i), i.id), reverse=True)
         self.fill_table(keep)
 
     def fill_table(self, keep: str | None = None) -> None:
+        """Show the ideas that match the filter; titles take the width the rest leaves."""
         table = self.table
+        keep = keep or self.current_id()
         row = table.cursor_row
-        table.clear()
+        table.clear(columns=True)
         query = self.filter_input.value
         words = query.casefold().split()
         broken = [b for b in self.broken_files if all(w in b.path.name.casefold() for w in words)]
         self.shown = [*broken, *views.filter_ideas(self.ideas, query)]
+        status_width = max(
+            [len("status"), *(len(_status_label(item)) for item in self.shown)]
+        )
+        widths = [status_width, 3, 3, len("effort")]
+        # Each column has one cell of padding on both sides; leave room for a scrollbar.
+        spare = table.size.width - sum(w + 2 for w in widths) - 2 - SCROLLBAR
+        title_width = max(TITLE_MIN, spare if table.size.width else TITLE_DEFAULT)
+        table.add_column("title", width=title_width)
+        for name, width in zip(("status", "exc", "imp", "effort"), widths, strict=True):
+            table.add_column(name, width=width)
         for item in self.shown:
             if isinstance(item, BrokenFile):
+                title = Text(item.path.name)
+                title.truncate(title_width, overflow="ellipsis")
                 table.add_row(
-                    Text(item.path.stem),
-                    Text(item.path.name),
-                    Text(UNREADABLE, style="bold red"),
-                    "",
-                    "",
-                    "",
-                    key=_key(item),
+                    title, Text(UNREADABLE, style="bold red"), "", "", "", key=_key(item)
                 )
                 continue
+            title = Text(item.title)
+            title.truncate(title_width, overflow="ellipsis")
             table.add_row(
-                Text(item.id),
-                Text(item.title),
+                title,
                 Text(item.status.value, style=STATUS_STYLE[item.status]),
                 str(item.excitement or ""),
                 str(item.impact or ""),

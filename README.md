@@ -213,8 +213,9 @@ same question is asked again. Outside a terminal it only lists the ideas.
 
 ### Full-screen view
 
-`pet ui`, or `pet` on its own in a terminal, opens a list of ideas with a preview of
-the selected one. Keys:
+`pet ui`, or `pet` on its own in a terminal, opens a list of ideas, newest first,
+with a preview of the selected one. The list shows each idea's title, status,
+excitement, impact and effort; the preview shows its id and details. Keys:
 
 | Key | Action |
 |---|---|
