@@ -682,3 +682,30 @@ def test_list_and_find_aliases(home):
     help_text = runner.invoke(app, ["--help"], env={"COLUMNS": "200"}).output
     assert "│ list " not in help_text and "│ find " not in help_text
     assert "│ ls " in help_text
+
+
+def test_rm_needs_yes_outside_terminal(home):
+    pet(home, "init")
+    pet(home, "add", "A")
+    result = pet(home, "rm", "a")
+    assert result.exit_code == 1
+    assert "pass --yes to delete without asking" in result.output
+    assert (home.ideas / "a.md").exists()
+
+
+def test_rm_deletes_and_cleans_related(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "A")
+    pet(home, "add", "B")
+    pet(home, "add", "C")
+    pet(home, "set", "b", "related=a,c")
+    result = pet(home, "rm", "a", "--yes")
+    assert result.exit_code == 0, result.output
+    assert "- a" in result.output and "updated related in: b" in result.output
+    assert sorted(p.name for p in home.ideas.iterdir()) == ["b.md", "c.md"]
+    assert "- a\n" not in idea_text(home, "b") and "- c" in idea_text(home, "b")
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: True)
+    assert "Not deleted." in pet(home, "rm", "c", input="n\n").output
+    assert pet(home, "delete", "c", input="y\n").exit_code == 0
+    assert pet(home, "delete", "b", "--yes").exit_code == 0
+    assert list(home.ideas.iterdir()) == []

@@ -137,6 +137,21 @@ class Store:
                 changed.append(other)
         return changed
 
+    def delete(self, idea: Idea) -> list[Idea]:
+        """Delete an idea's file and remove its id from other ideas' related lists.
+
+        Returns the other ideas whose related list changed.
+        """
+        if idea.path is not None:
+            idea.path.unlink(missing_ok=True)
+        changed = []
+        for other in self.all():
+            if idea.id in other.related:
+                other.related = [item for item in other.related if item != idea.id]
+                self.save(other)
+                changed.append(other)
+        return changed
+
     def save(self, idea: Idea) -> Path:
         path = idea.path or self.home.ideas / f"{idea.id}.md"
         path.write_text(idea.to_markdown(), encoding="utf-8")

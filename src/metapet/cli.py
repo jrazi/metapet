@@ -767,6 +767,34 @@ def rename(
         console.print(f"updated related in: {escape(', '.join(i.id for i in changed))}")
 
 
+@app.command("rm")
+def rm(
+    ctx: typer.Context,
+    idea_id: IdArg,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Delete without asking.")] = False,
+) -> None:
+    """Delete an idea.
+
+    Other ideas that list it under related are updated. In a terminal, asks first; otherwise pass --yes. If the store is a git repository (pet init --git), the file stays in its history.
+    """
+    store = _store(ctx)
+    idea = _find(store, idea_id)
+    console.print(f"{escape(idea.id)}  [dim]{escape(idea.title)}[/]", soft_wrap=True)
+    if not yes:
+        if not _interactive(False):
+            _fail("pass --yes to delete without asking")
+        if not click.confirm("Delete this idea? This cannot be undone.", default=False):
+            console.print("Not deleted.")
+            return
+    changed = store.delete(idea)
+    console.print(f"[red]-[/] {escape(idea.id)}")
+    if changed:
+        console.print(f"updated related in: {escape(', '.join(i.id for i in changed))}")
+
+
+app.command("delete", hidden=True)(rm)
+
+
 # -- lifecycle ---------------------------------------------------------------
 
 
