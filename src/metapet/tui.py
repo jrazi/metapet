@@ -236,7 +236,7 @@ class PetApp(App[None]):
         try:
             return Idea.load(idea.path) if idea.path else idea
         except (OSError, IdeaError) as exc:
-            self.notify(f"Could not read {idea.id}: {exc}", severity="error")
+            self.notify(f"Could not read {idea.id}: {exc}", severity="error", markup=False)
             self.reload()
             return None
 
@@ -342,7 +342,7 @@ class PetApp(App[None]):
 
         self.run_outside(guarded)
         for problem in problems:
-            self.notify(problem, severity="warning")
+            self.notify(problem, severity="warning", markup=False)
 
     def action_add(self) -> None:
         created: list[str] = []
