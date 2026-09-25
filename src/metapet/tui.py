@@ -6,6 +6,7 @@ suspended, through the same question flows as the command line.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from collections.abc import Callable
 
@@ -320,11 +321,8 @@ class PetApp(App[None]):
 
     def _suspend_and_run(self, fn: Callable[[], None]) -> None:
         try:
-            with self.suspend():
-                try:
-                    _run_in_thread(fn)
-                except KeyboardInterrupt:
-                    pass
+            with self.suspend(), contextlib.suppress(KeyboardInterrupt):
+                _run_in_thread(fn)
         except SuspendNotSupported:
             self.notify("Not supported in this terminal", severity="error")
 
