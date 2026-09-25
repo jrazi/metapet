@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib
 import inspect
 import random
 import sys
@@ -22,6 +23,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from typer.core import TyperArgument, TyperCommand
 
 from metapet import (
     export,
@@ -79,7 +81,65 @@ def _lifecycle_help() -> str:
 
 LIFECYCLE_HELP = _lifecycle_help()
 
-app = typer.Typer(
+# Newer Typer versions build commands on their own copy of click; parameter types and
+# completion items must come from the same copy.
+_click_package = TyperCommand.__mro__[1].__module__.rpartition(".")[0]
+_click_types = importlib.import_module(_click_package + ".types")
+_click_completion = importlib.import_module(_click_package + ".shell_completion")
+
+
+class _Text(_click_types.StringParamType):
+    """Plain text argument; help shows only its name, not a `<str>` type."""
+
+    def get_metavar(self, param: TyperArgument, ctx: typer.Context | None = None) -> str:
+        return ""
+
+
+class _IdText(_Text):
+    """An idea id argument that completes ids.
+
+    Typer's own `autocompletion` keeps only values that start with the typed text,
+    which would drop matches on a fragment of the id or title.
+    """
+
+    def shell_complete(
+        self, ctx: typer.Context, param: TyperArgument, incomplete: str
+    ) -> list:
+        return [
+            _click_completion.CompletionItem(idea_id, help=help_)
+            for idea_id, help_ in _complete_ids(ctx, incomplete)
+        ]
+
+
+class _Command(TyperCommand):
+    """A command whose help shows arguments as NAME and [NAME], without types or braces."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        for param in self.params:
+            if isinstance(param, TyperArgument) and type(param.type) is _click_types.StringParamType:
+                param.type = _Text()
+
+    def collect_usage_pieces(self, ctx: typer.Context) -> list[str]:
+        pieces = [self.options_metavar] if self.options_metavar else []
+        for param in self.get_params(ctx):
+            if not isinstance(param, TyperArgument):
+                pieces.extend(param.get_usage_pieces(ctx))
+                continue
+            name = param.make_metavar(ctx)
+            if not param.required and not name.startswith("["):
+                name = f"[{name}]"
+            pieces.append(name)
+        return pieces
+
+
+class _App(typer.Typer):
+    def command(self, *args, **kwargs):
+        kwargs.setdefault("cls", _Command)
+        return super().command(*args, **kwargs)
+
+
+app = _App(
     help="Capture and grow pet-project ideas.\n\n"
     + LIFECYCLE_HELP
     + "\n\n[bold]Tab completion[/] (commands and idea ids): pet --install-completion, "
@@ -222,7 +282,7 @@ def _field(idea_schema: Schema, name: str) -> schema.Field:
         _fail(f"unknown field '{escape(name)}'; known fields: {known}")
 
 
-def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
+def _complete_ids(ctx: click.Context, incomplete: str) -> list[tuple[str, str]]:
     """Shell completion for idea ids; completion must never fail loudly."""
     try:
         home = paths.resolve(ctx.find_root().params.get("home"))
@@ -276,7 +336,7 @@ IdArg = Annotated[
     typer.Argument(
         metavar="ID",
         help="Idea id; any unique prefix or fragment of the id or title works.",
-        autocompletion=_complete_ids,
+        click_type=_IdText(),
     ),
 ]
 

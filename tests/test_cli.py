@@ -686,6 +686,35 @@ def test_completion_falls_back_to_fragments(home):
     assert [i for i, _ in cli._complete_ids(FakeContext(home), "tel")] == ["telegram-bot"]
 
 
+def _shell_complete(home, words: str, cword: int) -> list[str]:
+    """Ask the CLI for bash completions, the way the installed shell script does."""
+    env = {
+        "_PET_COMPLETE": "complete_bash",
+        "COMP_WORDS": f"pet --home {home.path} {words}",
+        "COMP_CWORD": str(cword + 2),
+    }
+    result = runner.invoke(app, [], env=env, prog_name="pet")
+    return result.output.split()
+
+
+def test_shell_completion_offers_fragment_and_non_latin_matches(home):
+    pet(home, "init")
+    pet(home, "add", "داشبورد خانگی", "--id", "dashboard")
+    pet(home, "add", "Second idea", "--id", "second")
+    assert _shell_complete(home, "show خانگی", 2) == ["dashboard"]
+    assert _shell_complete(home, "show cond", 2) == ["second"]
+    assert _shell_complete(home, "show s", 2) == ["second"]
+    assert _shell_complete(home, "show ", 2) == ["dashboard", "second"]
+
+
+def test_argument_help_has_no_types_or_braces():
+    for command in ("refine", "search", "add", "new"):
+        text = runner.invoke(app, [command, "--help"], env={"COLUMNS": "100"}).output
+        assert "<str>" not in text and "{" not in text, text
+    usage = runner.invoke(app, ["refine", "--help"]).output
+    assert "refine [OPTIONS] ID [FIELD]" in usage
+
+
 def test_list_and_find_aliases(home):
     pet(home, "init")
     pet(home, "add", "Budget tracker")
