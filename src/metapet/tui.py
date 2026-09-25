@@ -51,6 +51,9 @@ class TextPrompt(ModalScreen[str | None]):
         with Vertical(classes="dialog"):
             yield Label(self.question, markup=False)
             yield Input(id="answer")
+            yield Label("Enter to save, Escape to cancel.", classes="hint")
+        # Covers the main footer, whose keys do not work while the dialog is open.
+        yield Footer()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
@@ -76,6 +79,7 @@ class ScalePrompt(ModalScreen[int | None]):
         with Vertical(classes="dialog"):
             yield Label(self.question, markup=False)
             yield Label("Press 1 to 5, or Escape to cancel.", classes="hint")
+        yield Footer()
 
     def action_pick(self, value: int) -> None:
         self.dismiss(value)

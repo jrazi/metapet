@@ -1,11 +1,11 @@
 import asyncio
 
-from textual.widgets import DataTable, Input
+from textual.widgets import DataTable, Footer, Input
 
 from metapet import schema, stages
 from metapet.model import Idea, Status
 from metapet.prompter import ScriptedPrompter
-from metapet.tui import EMPTY_STORE, PetApp
+from metapet.tui import EMPTY_STORE, PetApp, TextPrompt
 
 S = schema.builtin()
 
@@ -104,6 +104,24 @@ def test_note_is_added_to_the_file(store):
         await pilot.press("enter")
         await pilot.pause()
         assert "try inline mode" in on_disk(store, "telegram-bot").body
+
+    run(app, test)
+
+
+def test_note_dialog_says_how_to_save_and_hides_main_keys(store):
+    seeded(store)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        await pilot.press("n")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, TextPrompt)
+        hints = [str(label.render()) for label in screen.query(".hint")]
+        assert hints == ["Enter to save, Escape to cancel."]
+        shown = {b.binding.description for b in screen.active_bindings.values() if b.binding.show}
+        assert "Promote" not in shown
+        screen.query_one(Footer)
 
     run(app, test)
 
