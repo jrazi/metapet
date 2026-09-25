@@ -26,6 +26,7 @@ from rich.text import Text
 from typer.core import TyperArgument, TyperCommand
 
 from metapet import (
+    __version__,
     export,
     fields,
     ids,
@@ -69,9 +70,8 @@ def _stage_rows(idea_schema: Schema) -> list[str]:
 
 def _lifecycle_help() -> str:
     return (
-        "[bold]Lifecycle:[/] seed → sketch → spec → building → shipped, or shelved at any point.\n"
-        + "\n".join(_stage_rows(schema.builtin()))
-        + "\n\n"
+        "[bold]Stages:[/] seed → sketch → spec → building → shipped, "
+        "or shelved at any point.\n" + "\n".join(_stage_rows(schema.builtin())) + "\n\n"
         "Fields marked * are expected before moving on; promote only warns when they are empty, "
         "and any question can be skipped. Change the stages in <data home>/stages.toml (see the "
         "README): a stage defined there replaces the built-in stage of the same name. "
@@ -141,7 +141,7 @@ class _App(typer.Typer):
 
 
 app = _App(
-    help="Capture and grow pet-project ideas.\n\n"
+    help="Keep pet-project ideas as Markdown files.\n\n"
     + LIFECYCLE_HELP
     + "\n\n[bold]Tab completion[/] (commands and idea ids): pet --install-completion, "
     "then open a new shell.\n\n"
@@ -161,6 +161,12 @@ STATUS_STYLE = {
 }
 
 
+def _show_version(value: bool) -> None:
+    if value:
+        typer.echo(f"pet {__version__}")
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -170,6 +176,12 @@ def main(
             "--home", metavar="PATH", help="Data directory to use (overrides $METAPET_HOME)."
         ),
     ] = None,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version", callback=_show_version, is_eager=True, help="Show the version and exit."
+        ),
+    ] = False,
 ) -> None:
     ctx.obj = paths.resolve(home)
     if ctx.invoked_subcommand is not None or ctx.resilient_parsing:
@@ -552,14 +564,16 @@ def init(
         except sync.SyncError as exc:
             _fail(str(exc))
         target = f" → {remote}" if remote else ""
-        console.print(f"Git backup enabled{target}; run [bold]pet sync[/] to back up.")
+        console.print(
+            f"Git backup enabled{target}; run [bold]pet sync[/] to back up.", soft_wrap=True
+        )
 
 
 @app.command()
 def where(ctx: typer.Context) -> None:
     """Show which data directory is in use, and why."""
     home: paths.DataHome = ctx.obj
-    state = "" if home.exists else "  [yellow](not initialized — run `pet init`)[/]"
+    state = "" if home.exists else "  [yellow](not initialized; run `pet init`)[/]"
     console.print(f"{home.path}  [dim]← {home.source}[/]{state}", soft_wrap=True)
 
 
@@ -585,7 +599,7 @@ def add(
     id_: IdOption = None,
     verbose: Verbose = False,
 ) -> None:
-    """Capture a seed instantly, without opening an editor.
+    """Add an idea with just a title, without opening an editor.
 
     Grow it later with pet promote ID (see pet promote --help for the stages).
     """
@@ -801,7 +815,11 @@ def list_ideas(
     if not everything:
         console.print('No ideas yet. Capture one with pet add "..."', markup=False)
     elif not ideas:
-        console.print("No ideas match these filters." if status or tag else "No live ideas.")
+        console.print(
+            "No ideas match these filters."
+            if status or tag
+            else "All ideas are shipped or shelved."
+        )
     else:
         extra = (
             {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == SortKey.SCORE else None
@@ -1106,7 +1124,7 @@ def shelve(
     idea_id: IdArg,
     reason: Annotated[str, typer.Argument(metavar="REASON", help="Why you're putting it aside.")],
 ) -> None:
-    """Shelve an idea, keeping the reason for future you.
+    """Shelve an idea and record why.
 
     Shelved ideas are hidden from ls and next (see them with ls -a) and gain a Retro
     section. The reason is also added to Notes, with the date. Bring one back with: pet
@@ -1133,7 +1151,7 @@ def shelve(
 
 
 @app.command(
-    help="Go through live ideas you have not looked at for a while.\n\n"
+    help="Go through ideas you have not looked at for a while (not shipped or shelved).\n\n"
     "An idea counts as looked at when it was created, changed or reviewed. In a terminal, "
     "shows each idea, oldest first, and asks what to do with it: promote, refine, add a note, "
     "set excitement, shelve, skip or quit. Skip, or any action that changes the idea, marks "
@@ -1252,7 +1270,7 @@ def next_(
     all_ideas, broken = _store(ctx).scan()
     ranked = scoring.rank(all_ideas)[:count]
     if not ranked:
-        console.print('[dim]No live ideas. Capture one with[/] pet add "..."')
+        console.print('[dim]Nothing to suggest. Add an idea with[/] pet add "..."')
     else:
         ideas = [idea for idea, _ in ranked]
         _print_ideas(ideas, {"score": [f"{value:.2f}" for _, value in ranked]})
@@ -1261,17 +1279,17 @@ def next_(
 
 @app.command("random")
 def random_(ctx: typer.Context) -> None:
-    """Resurface a random seed or sketch you may have forgotten."""
+    """Show a random seed or sketch."""
     pool = [i for i in _store(ctx).all() if i.status in (Status.SEED, Status.SKETCH)]
     if not pool:
-        console.print("[dim]No seeds or sketches to resurface.[/]")
+        console.print("[dim]No seeds or sketches.[/]")
         return
     _print_idea(random.choice(pool), _schema(ctx))
 
 
 @app.command()
 def stats(ctx: typer.Context) -> None:
-    """Counts by status, tag and month."""
+    """Count ideas by stage, tag and month."""
     ideas, broken = _store(ctx).scan()
     if not ideas:
         console.print("[dim]No ideas yet.[/]")
@@ -1282,8 +1300,12 @@ def stats(ctx: typer.Context) -> None:
     by_month = Counter(i.created.strftime("%Y-%m") for i in ideas)
     recent = _last_months(dt.date.today(), 6)
 
-    live = sum(1 for i in ideas if not i.status.terminal)
-    table = Table(title=f"{len(ideas)} ideas ({live} live)", box=None, show_header=False)
+    active = sum(1 for i in ideas if not i.status.terminal)
+    table = Table(
+        title=f"{len(ideas)} {'idea' if len(ideas) == 1 else 'ideas'} ({active} active)",
+        box=None,
+        show_header=False,
+    )
     table.add_column(style="bold")
     table.add_column()
     table.add_row(
@@ -1319,7 +1341,7 @@ def stages_(ctx: typer.Context) -> None:
 
 @app.command()
 def check(ctx: typer.Context) -> None:
-    """Validate every idea file and stages.toml, and list empty expected fields."""
+    """Check every idea file and stages.toml, and list empty fields marked *."""
     store = _store(ctx)
     ideas, broken = store.scan()
     mismatched = [i for i in ideas if i.path and i.path.stem != i.id]
@@ -1347,11 +1369,6 @@ def check(ctx: typer.Context) -> None:
     except SchemaError as exc:
         idea_schema = None
         err.print(f"[red]✗[/] {escape(str(exc))}", soft_wrap=True)
-    if store.home.templates.is_dir():
-        err.print(
-            "[yellow]![/] templates/ is no longer used; stage fields now come from "
-            "stages.toml (see README)"
-        )
     if idea_schema is not None:
         for idea in ideas:
             body = sections.parse(idea.body)
@@ -1397,7 +1414,7 @@ def sync_(
         str | None, typer.Option("--message", "-m", metavar="TEXT", help="Commit message.")
     ] = None,
 ) -> None:
-    """Back up the store: commit, pull --rebase, push (if it's a git repo)."""
+    """Back up with git: commit, pull and push (if the store is a git repo)."""
     store = _store(ctx)
     try:
         steps = sync.sync(store.home.path, message)
@@ -1414,7 +1431,7 @@ def export_(
         Path | None, typer.Option("--md", metavar="FILE", help="Write a Markdown index here.")
     ] = None,
     json_: Annotated[
-        Path | None, typer.Option("--json", metavar="FILE", help="Write a JSON dump here.")
+        Path | None, typer.Option("--json", metavar="FILE", help="Write all ideas as JSON here.")
     ] = None,
 ) -> None:
     """Export all ideas as a Markdown index and/or JSON.

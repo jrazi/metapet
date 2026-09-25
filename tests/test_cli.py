@@ -19,6 +19,15 @@ def pet(home, *args, input=None):
     return result
 
 
+def test_version_option():
+    from metapet import __version__
+
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert result.output == f"pet {__version__}\n"
+    assert __version__ == "0.1.0"
+
+
 def test_commands_require_init(home):
     result = pet(home, "ls")
     assert result.exit_code == 1
@@ -272,17 +281,15 @@ def test_promote_warns_about_empty_expected_fields(home):
     assert "status: spec" in idea_text(home, "budget-tracker")
 
 
-def test_check_lists_readiness_and_warns(home):
+def test_check_lists_empty_expected_fields(home):
     pet(home, "init")
     pet(home, "add", "Budget tracker")
     pet(home, "promote", "budget")
-    home.templates.mkdir()
     result = pet(home, "check")
     assert result.exit_code == 0, result.output
     assert "· budget-tracker (sketch): empty: Problem (problem), Rough solution (solution)" in (
         result.output
     )
-    assert "templates/ is no longer used" in result.output
     assert "1 idea OK" in result.output
 
 
@@ -456,7 +463,7 @@ def test_review_ctrl_c_exits_130(home, monkeypatch):
 def test_bare_pet_without_a_terminal_prints_help(home):
     result = pet(home)
     assert result.exit_code == 0
-    assert "Usage" in result.output and "Capture and grow" in result.output
+    assert "Usage" in result.output and "Keep pet-project ideas" in result.output
 
 
 def test_bare_pet_in_a_terminal_opens_the_ui(home, monkeypatch):
@@ -1060,9 +1067,15 @@ def test_stats_labels(home):
     pet(home, "add", "B")
     pet(home, "shelve", "b", "later")
     output = pet(home, "stats").output
-    assert "2 ideas (1 live)" in output
+    assert "2 ideas (1 active)" in output
     assert "top tags" in output and "added (last 6 months)" in output
     assert f"{dt.date.today():%Y-%m} 2" in output
+
+
+def test_stats_singular_count(home):
+    pet(home, "init")
+    pet(home, "add", "A")
+    assert "1 idea (1 active)" in pet(home, "stats").output
 
 
 def test_last_months():

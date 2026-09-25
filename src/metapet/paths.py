@@ -19,7 +19,6 @@ from platformdirs import user_data_dir
 APP_NAME = "metapet"
 ENV_VAR = "METAPET_HOME"
 IDEAS_DIR = "ideas"
-TEMPLATES_DIR = "templates"  # no longer used; kept so `pet check` can warn about it
 STAGES_FILE = "stages.toml"
 
 
@@ -31,10 +30,6 @@ class DataHome:
     @property
     def ideas(self) -> Path:
         return self.path / IDEAS_DIR
-
-    @property
-    def templates(self) -> Path:
-        return self.path / TEMPLATES_DIR
 
     @property
     def stages_file(self) -> Path:

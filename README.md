@@ -1,132 +1,131 @@
 # metapet
 
-A tiny CLI for capturing pet-project ideas the moment they strike, then growing
-them from a one-line seed into a buildable spec.
+A small command-line tool for keeping your side-project ideas in one place.
 
-```console
-$ pet add "Spotify downloader bot for Telegram" -t telegram -t bot
-+ spotify-downloader-bot-for-telegram  Spotify downloader bot for Telegram
-$ pet promote spotify
-spotify-downloader-bot-for-telegram: seed → sketch
-$ pet next
-```
+Side-project ideas tend to end up spread across notes apps, chats and browser tabs,
+and most of them are hard to find again when you finally have time to build
+something. metapet keeps each idea as a Markdown file on your computer. Adding one
+takes a few seconds. Later you can come back and fill it in, as the idea grows from
+a rough thought into something you could start building.
 
-## Install
+The command is `pet`.
 
-Requires [uv](https://docs.astral.sh/uv/).
+## Installation
 
 ```sh
-git clone <this repo> && cd metapet
-uv tool install -e .     # puts `pet` on your PATH
-pet init
+uv tool install metapet
 ```
 
-Or run it without installing: `uv run pet …`.
-
-### Tab completion
+or
 
 ```sh
-pet --install-completion   # bash, zsh, fish or PowerShell; then open a new shell
+pipx install metapet
 ```
 
-Completes commands, options and idea ids (`pet show sp<TAB>`); zsh and fish also
-show each idea's title. When no id starts with what you typed, ideas whose id or title
-contain it are offered instead (bash and fish show these; zsh may not).
-`pet --help` and `pet promote --help` explain the lifecycle and list each stage's fields.
+metapet needs Python 3.11 or newer. To try it without installing, run
+`uvx --from metapet pet --help`.
 
-## Where ideas live
+## Quick start
 
-The repository holds **only the tool**. Your ideas are stored in a separate data
-directory and never enter this repo's history. The first match wins:
-
-| # | Source | Example |
-|---|---|---|
-| 1 | `--home PATH` flag | `pet --home ~/ideas ls` |
-| 2 | `METAPET_HOME` environment variable | `export METAPET_HOME=~/ideas` |
-| 3 | `./data` in a source checkout, **if it exists** (portable mode, gitignored) | `pet init --local` |
-| 4 | The platform's user data directory | Linux `~/.local/share/metapet`, macOS `~/Library/Application Support/metapet`, Windows `%LOCALAPPDATA%\metapet` |
-
-`pet where` prints the directory in use and which rule picked it.
-
-```
-<data home>/
-├── ideas/<id>.md    # one idea per file
-└── stages.toml      # optional changes to the stage fields
+```sh
+pet init                          # create the place where ideas are stored
+pet add "Plant watering bot"      # save an idea with just a name
+pet new                           # add an idea and answer a few questions about it
+pet ls                            # list your ideas
+pet promote plant                 # move an idea to its next stage
+pet                               # open the full-screen view
 ```
 
-## Ideas
+You don't have to type the whole id: any part of the id or title that matches only
+one idea works, so `plant` finds `plant-watering-bot`.
 
-Each idea is a Markdown file with YAML frontmatter, pleasant to edit by hand:
+## How it works
+
+### Stages
+
+Every idea has a stage:
+
+| Stage | Meaning |
+|---|---|
+| seed | a raw thought: a name, maybe a sentence |
+| sketch | thought through for a few minutes |
+| spec | concrete enough to start building from |
+| building | work has started |
+| shipped | done and usable |
+| shelved | put aside on purpose, with a reason |
+
+Each stage comes with a few questions, such as "What problem does it solve?" or
+"What is the smallest version you would actually use?". `pet promote` asks them when an idea
+moves to the next stage, and `pet refine` lets you answer them again later. You can
+skip any question. `pet stages` lists the fields of every stage.
+
+### Idea files
+
+Each idea is a Markdown file with a little YAML at the top. You can open it in any
+editor, or with `pet edit`:
 
 ```markdown
 ---
-id: spotify-downloader-bot-for-telegram
-title: Spotify downloader bot for Telegram
-status: seed
+id: plant-watering-bot
+title: Plant watering bot
+status: sketch
 created: 2026-09-25
-tags: [telegram, bot]
-excitement: 4      # 1-5
-impact: 3          # 1-5
-effort: M          # S / M / L / XL
+updated: 2026-09-25
+tags:
+- hardware
+excitement: 4
 ---
-Send a Spotify link, get the audio back.
+Water the plants when the soil is dry.
+
+## Problem
+I forget to water them.
 ```
 
-Only `id`, `title`, `status` and `created` are required. Optional fields are
-`updated`, `reviewed`, `tags`, `excitement`, `impact`, `effort`, `repo`, `related`
-and `shelved_reason`. Unknown keys are preserved.
+### Full-screen view
 
-### Ids
+`pet` on its own (or `pet ui`) shows your ideas with a preview of the selected one.
 
-Each idea has an id, which is also its file name and what you type in commands.
-pet makes it from the title: lowercase letters, digits and hyphens, at most 40
-characters, cut at a whole word. Titles in other scripts are spelled in Latin letters
-(`Телеграм бот` becomes `telegram-bot`) so the id can be typed on any keyboard. You do
-not have to type the whole id: any unique prefix or fragment of the id or title works.
-
-Choose the id yourself with `pet add TITLE --id ID` (or `pet new --id ID`). Change it
-later with `pet rename ID NEW_ID`; without `NEW_ID` the id is made again from the
-current title. Other ideas that list the old id under `related` are updated.
-
-### Lifecycle
-
-`seed → sketch → spec → building → shipped`, or `shelved` at any point.
-
-Each stage has a few fields: questions worth answering before the idea moves on.
-Most answers are sections in the body (`## Problem`); a few are frontmatter keys.
-Fields marked * are expected before moving on:
-
-| Stage | Fields (key: where it is stored) |
+| Key | Action |
 |---|---|
-| seed | title*: frontmatter · summary: text before the first heading · tags, excitement: frontmatter |
-| sketch | problem* (`## Problem`) · audience (`## Who it's for`) · solution* (`## Rough solution`) · value (`## Value`) · why_now (`## Why now`) |
-| spec | features* (`## Features`) · mvp* (`## MVP scope`) · stack · risks · prior_art (sections) · effort, impact: frontmatter |
-| building | repo*: frontmatter · next_step (`## Next step`) · log (`## Log`, dated items) |
-| shipped / shelved | retro (`## Retro`) |
-| any stage | notes (`## Notes`, dated items) · links (`## Links`) · related: frontmatter |
+| `/` | filter by words, `status:spec` or `tag:cli` |
+| `a` | add an idea |
+| `p` | promote to the next stage |
+| `r` | answer the idea's questions |
+| `n` | add a note |
+| `s` | shelve |
+| `e` | open in your editor |
+| `q` | quit |
 
-`pet promote` moves an idea forward and adds an empty section, with the question as
-an HTML comment, for each section field of the new stage. It never touches what you
-have already written and skips sections you already have. Every field can be left
-empty: if an expected field of an earlier stage is empty, promote warns and moves the
-idea anyway. In a terminal it first offers to fill those fields, then asks the
-questions of the new stage that are still empty; any question can be skipped, and
-answered ones are changed with `pet refine`. Moving back (`--to` an earlier stage)
-adds and removes nothing. A shelved or shipped idea moved back with `--to STAGE` gets
-the sections of every stage up to STAGE, and an empty Retro section is removed.
-`pet check` lists the empty expected fields of every idea.
+## Other useful commands
 
-Fill fields by answering questions with `pet refine ID`, with `pet set ID KEY=VALUE`,
-`pet note ID TEXT` or `pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name or key,
-ignoring case, so files written by older versions keep working. A `## ` heading typed
-inside a field's answer is changed to `### `, so it stays part of that field.
+```sh
+pet note plant "Try a capacitive soil sensor"   # add a dated note
+pet set plant excitement=5 +garden             # change a field or add a tag
+pet next                                        # suggest what to work on next
+pet review                                      # go through ideas you haven't looked at in a while
+pet search sensor                               # find ideas
+```
 
-### Changing the stages
+Run `pet --help` for the full list, and `pet <command> --help` for details.
 
-Put a `stages.toml` in the data home to change the fields. A stage you define there
-replaces the built-in stage of the same name completely, including its field list;
-stages you leave out stay as they are. If your stage has no `meaning`, the built-in
-one is kept. For example, to give `sketch` just two fields:
+## Configuration
+
+### Where ideas are stored
+
+pet stores ideas in the first of these that is set:
+
+1. the `--home PATH` option
+2. the `METAPET_HOME` environment variable
+3. the default data folder for your system: `~/.local/share/metapet` on Linux,
+   `~/Library/Application Support/metapet` on macOS and `%LOCALAPPDATA%\metapet`
+   on Windows
+
+`pet where` shows which folder is in use.
+
+### Custom stages
+
+To change the questions, put a `stages.toml` file in that folder. A stage you define
+there replaces the built-in stage with the same name:
 
 ```toml
 [sketch]
@@ -138,124 +137,40 @@ label = "Problem"
 question = "What problem does it solve?"
 kind = "long"
 required = true
-
-[[sketch.fields]]
-key = "vibe"
-label = "Vibe"
-question = "How should it feel to use?"
 ```
 
-See [`src/metapet/stages.toml`](src/metapet/stages.toml) for the built-in file and
-every option (`kind`, `store`, `hint`, `choices`, `aliases`, `dated`). `pet stages`
-shows the stages and field keys in use, and `pet check` reports mistakes in your file. Each field key can
-be used by one field only, and no two section fields can use the same heading (label,
-alias, or key with `_` read as a space). The old `templates/` folder is no longer used.
+The [built-in stages.toml](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
+shows every option. `pet check` reports mistakes in your file.
 
-## Commands
+### Backup
 
-| Command | What it does |
-|---|---|
-| `pet init [--local] [--git] [--remote URL]` | Create the store, optionally as a git repo |
-| `pet add TITLE [-t TAG]… [-m NOTE] [--id ID] [-v] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
-| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--id ID] [-v] [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
-| `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved); also `pet list` |
-| `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment. `pet edit` also opens a file that cannot be read, so it can be fixed |
-| `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
-| `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields (by key or heading); an empty value clears one. For `notes` and `log`, each value adds a dated item |
-| `pet note ID TEXT` | Add a dated line to the Notes section |
-| `pet rm ID [--yes]` | Delete an idea (asks first; outside a terminal pass `--yes`); also `pet delete` |
-| `pet rename ID [NEW_ID]` | Change an idea's id and file name; without `NEW_ID`, make it from the title |
-| `pet promote ID [--to STATUS] [-v] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
-| `pet refine ID [FIELD]` | Answer one field again, or pick fields from a list |
-| `pet shelve ID REASON` | Park an idea, remembering why (the reason is also added to Notes with the date) |
-| `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
-| `pet ui` · `pet` | Browse and change ideas in a full-screen view (bare `pet` outside a terminal prints help) |
-| `pet search QUERY… [-a]` | Find ideas whose id, title, tags or text contain all the words; `status:NAME` and `tag:NAME` work as in the `pet ui` filter; `-a` includes shipped/shelved; also `pet find` |
-| `pet next [-n N]` | Suggest what to build next |
-| `pet random` | Resurface a forgotten seed or sketch |
-| `pet stats` | Counts by status, tag and month |
-| `pet stages` | Show the stages and their field keys, including your `stages.toml` |
-| `pet check` | Validate idea files and `stages.toml`; list empty expected fields |
-| `pet where` | Show the data directory in use |
-| `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |
-| `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump; `-` as FILE writes to standard output |
-
-In a terminal, `ls`, `search`, `next` and `review` show a table with one line per idea;
-when the terminal is narrow, long titles are cut with `…` and the least important
-columns (created, effort, impact, tags, excitement) are left out. When the output goes
-to a pipe or a file, they print one tab-separated line per idea instead, with no
-header: id, status, title, tags (comma separated), excitement, impact, effort, created,
-then any extra column (score, last seen). For example, `pet ls | grep -c seed`.
-
-The title is a short name. When the title given to `add` or `new` is longer than 60
-characters, its first words become the title and the full text is kept as the summary.
-In a terminal, `new` asks first, and also asks about titles of more than 8 words. `add`, `new` and `promote` print the id;
-`-v` also prints the path of the file (`pet where` shows the data directory).
-
-`new`, `add -i`, `promote`, `refine` and `review` ask questions only when run in a
-terminal; `--no-input` turns the questions off, and outside a terminal they use only
-the values you give. Press Enter to skip a question and keep the current value; clear a value
-with `pet set ID KEY=`. Every answer is saved right away, so Ctrl-C keeps the answers
-given so far.
-
-### How `next` ranks ideas
-
-Ranks by (excitement + impact) / effort weight (S=1, M=2, L=4, XL=8; missing values
-count as 3, 3 and M), plus up to 0.75 for later stages and up to 0.5 for ideas that
-have waited six months. Shipped and shelved ideas are excluded.
-
-### Reviewing ideas
-
-`pet review` shows the live ideas you have not looked at for a while, oldest first.
-An idea counts as looked at when it was created, changed or reviewed; the date of
-the last review is kept in the `reviewed` key. For each idea you can promote it,
-refine it, add a note, set its excitement, shelve it, skip it or quit. Skipping it,
-or any action that changes it, marks the idea as reviewed; if nothing changed, the
-same question is asked again. Outside a terminal it only lists the ideas.
-
-### Full-screen view
-
-`pet ui`, or `pet` on its own in a terminal, opens a list of ideas, newest first,
-with a preview of the selected one. The list shows each idea's title, status,
-excitement, impact and effort; the preview shows its id and details. Keys:
-
-| Key | Action |
-|---|---|
-| `/` | Filter: words, `status:spec`, `tag:cli` (Enter goes back to the list; Escape, in the filter or the list, clears it) |
-| `q` | Quit |
-| `a` | Add an idea |
-| `p` | Promote to the next stage; on a shelved or shipped idea, choose a stage to move it back to |
-| `r` | Refine: pick fields to answer |
-| `n` | Add a note |
-| `s` | Shelve, with a reason |
-| `e` | Open the file in `$EDITOR` |
-| `x` | Rate: set excitement (1-5) |
-
-Add, promote and refine ask the same questions as the commands of the same name;
-the view steps aside while they run and comes back afterwards. Shipped and shelved
-ideas are hidden unless the filter has a `status:` word.
-
-## Backing up your ideas
-
-Because ideas stay out of this repo, back them up however you like. The built-in
-option is to make the data directory its own (private) git repository:
+pet can keep the folder in its own git repository and sync it with a remote:
 
 ```sh
-pet init --git --remote git@github.com:<you>/<your-ideas-repo>.git
+pet init --git --remote git@github.com:<you>/<your-ideas>.git
 pet sync
 ```
 
-Cloud-synced folders (Dropbox, iCloud, Syncthing) also work: point
-`METAPET_HOME` at one.
+A folder synced by Dropbox, iCloud or Syncthing works too: point `METAPET_HOME` at it.
+
+### Shell completion
+
+```sh
+pet --install-completion
+```
+
+Open a new shell afterwards. Commands, options and idea ids will complete with Tab.
 
 ## Development
 
 ```sh
+git clone https://github.com/jrazi/metapet.git
+cd metapet
 uv sync
 uv run pytest
-uv run ruff check . && uv run ruff format --check .
+uv run pet --help
 ```
 
 ## License
 
-MIT
+MIT. See [LICENSE](https://github.com/jrazi/metapet/blob/main/LICENSE).

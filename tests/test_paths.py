@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from metapet import paths
 
 
@@ -35,6 +37,9 @@ def test_platform_default(monkeypatch):
     assert "metapet" in home.path.parts[-1]
 
 
+@pytest.mark.skipif(
+    paths.checkout_root() is None, reason="metapet is installed, not run from a source checkout"
+)
 def test_checkout_root_detected_from_source_tree():
     root = paths.checkout_root()
     assert root is not None and (root / "pyproject.toml").is_file()
