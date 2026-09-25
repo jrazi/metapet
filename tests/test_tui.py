@@ -348,3 +348,66 @@ def test_new_idea_is_first(store):
         assert rows(app)[0] == "zeta-idea"
 
     run(app, test)
+
+
+def test_footer_shows_filter_and_quit_at_80(store):
+    seeded(store)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        shown = [b.binding.description for b in app.screen.active_bindings.values() if b.binding.show]
+        assert shown[:2] == ["Filter", "Quit"]
+        assert not app.ENABLE_COMMAND_PALETTE
+
+    async def main():
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            await test(pilot)
+
+    asyncio.run(main())
+
+
+def test_escape_clears_filter(store):
+    seeded(store)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        await pilot.press("slash", *"money", "enter")
+        await pilot.pause()
+        assert rows(app) == ["budget-tracker"]
+        assert app.focused is app.query_one("#ideas", DataTable)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert sorted(rows(app)) == ["budget-tracker", "telegram-bot"]
+
+    run(app, test)
+
+
+def test_unknown_status_is_reported(store):
+    seeded(store)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        app.query_one("#filter", Input).value = "status:bogus"
+        await pilot.pause()
+        source = app.query_one("#preview").source
+        assert source.startswith("Unknown status: bogus (seed, sketch, spec")
+
+    run(app, test)
+
+
+def test_excitement_dialog_shows_current_value(store):
+    seeded(store)
+    idea = on_disk(store, "budget-tracker")
+    idea.excitement = 3
+    store.save(idea)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        select(app, "budget-tracker")
+        await pilot.press("x")
+        await pilot.pause()
+        labels = [str(label.render()) for label in app.screen.query("Label")]
+        assert labels[0] == "How excited are you about Budget tracker? (now 3)"
+
+    run(app, test)

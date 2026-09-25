@@ -78,3 +78,9 @@ def test_filter_ignores_comments():
     ideas = [Idea(id="x", title="X", body="## Problem\n<!-- What problem does it solve? -->\n")]
     assert views.filter_ideas(ideas, "what problem") == []
     assert views.filter_ideas(ideas, "problem") == ideas  # the heading is text
+
+
+def test_parse_query_unknown_status():
+    q = views.parse_query("status:bogus status:seed tag:CLI word")
+    assert q.unknown_statuses == ["bogus"]
+    assert q.statuses == {"bogus", "seed"} and q.tags == {"cli"} and q.words == ["word"]

@@ -152,19 +152,23 @@ class PetApp(App[None]):
         width: 60; height: auto; padding: 1 2;
         border: round $accent; background: $surface;
     }
+    .dialog Label { width: 1fr; }
     .hint { color: $text-muted; }
     """
+    # Filter and Quit come first so that a narrow footer still shows them.
     BINDINGS = [
+        Binding("slash", "filter", "Filter"),
+        Binding("q", "quit", "Quit"),
         Binding("a", "add", "Add"),
         Binding("p", "promote", "Promote"),
         Binding("r", "refine", "Refine"),
         Binding("n", "note", "Note"),
         Binding("s", "shelve", "Shelve"),
         Binding("e", "edit", "Edit"),
-        Binding("x", "excitement", "Excitement"),
-        Binding("slash", "filter", "Filter"),
-        Binding("q", "quit", "Quit"),
+        Binding("x", "excitement", "Excite"),
+        Binding("escape", "clear_filter", "Clear filter", show=False),
     ]
+    ENABLE_COMMAND_PALETTE = False
 
     def __init__(
         self,
@@ -300,6 +304,10 @@ class PetApp(App[None]):
             text = views.preview_markdown(item, self.schema)
         else:
             text = NO_MATCH if self.ideas or self.broken_files else EMPTY_STORE
+            unknown = views.parse_query(self.filter_input.value).unknown_statuses
+            if unknown:
+                names = ", ".join(status.value for status in Status)
+                text = f"Unknown status: {', '.join(unknown)} ({names})"
         self.query_one("#preview", Markdown).update(text)
 
     def selected(self) -> Idea | None:
@@ -348,6 +356,11 @@ class PetApp(App[None]):
     def action_filter(self) -> None:
         self.filter_input.display = True
         self.filter_input.focus()
+
+    def action_clear_filter(self) -> None:
+        """Escape in the list: clear the filter if there is one."""
+        if self.filter_input.value:
+            self.action_close_filter()
 
     def action_close_filter(self) -> None:
         self.filter_input.value = ""
@@ -402,7 +415,11 @@ class PetApp(App[None]):
                 self.store.save(idea)
                 self.reload(idea.id)
 
-        self.push_screen(ScalePrompt(f"How excited are you about {idea.title}?"), done)
+        now = fields.get(idea, field)
+        question = f"How excited are you about {idea.title}?"
+        if now:
+            question += f" (now {now})"
+        self.push_screen(ScalePrompt(question), done)
 
     # -- actions outside the UI --------------------------------------------------
 
@@ -467,7 +484,10 @@ class PetApp(App[None]):
             return
         target = idea.status.next()
         if target is None:
-            self.notify(f"{idea.id} is {idea.status.value}; use pet promote ID --to STAGE.")
+            self.notify(
+                f"{idea.id} is {idea.status.value}; use pet promote {idea.id} --to STAGE.",
+                markup=False,
+            )
             return
         old = idea.status
         result: list[bool] = []

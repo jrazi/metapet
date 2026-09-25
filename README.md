@@ -219,7 +219,8 @@ excitement, impact and effort; the preview shows its id and details. Keys:
 
 | Key | Action |
 |---|---|
-| `/` | Filter: words, `status:spec`, `tag:cli` (Enter goes back to the list, Escape clears) |
+| `/` | Filter: words, `status:spec`, `tag:cli` (Enter goes back to the list; Escape, in the filter or the list, clears it) |
+| `q` | Quit |
 | `a` | Add an idea |
 | `p` | Promote to the next stage |
 | `r` | Refine: pick fields to answer |
@@ -227,7 +228,6 @@ excitement, impact and effort; the preview shows its id and details. Keys:
 | `s` | Shelve, with a reason |
 | `e` | Open the file in `$EDITOR` |
 | `x` | Set excitement (1-5) |
-| `q` | Quit |
 
 Add, promote and refine ask the same questions as the commands of the same name;
 the view steps aside while they run and comes back afterwards. Shipped and shelved

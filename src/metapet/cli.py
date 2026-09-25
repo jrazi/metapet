@@ -1083,7 +1083,7 @@ def review(
 def ui(ctx: typer.Context) -> None:
     """Browse and change ideas in a full-screen view.
 
-    Keys: / filter, a add, p promote, r refine, n note, s shelve, e edit, x excitement, q quit.
+    Keys: / filter, q quit, a add, p promote, r refine, n note, s shelve, e edit, x excitement.
     Needs a terminal.
     """
     if not _interactive(False):

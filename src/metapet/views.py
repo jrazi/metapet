@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from metapet import fields, sections
-from metapet.model import Idea
+from metapet.model import Idea, Status
 from metapet.schema import Schema, Storage
 
 
@@ -75,6 +75,34 @@ def preview_markdown(idea: Idea, schema: Schema) -> str:
     return "\n\n".join(parts) + "\n"
 
 
+@dataclass(frozen=True)
+class Query:
+    statuses: set[str]
+    tags: set[str]
+    words: list[str]
+    unknown_statuses: list[str]  # status: names that are not statuses
+
+
+def parse_query(query: str) -> Query:
+    """Split a filter into status:NAME and tag:NAME tokens and plain words."""
+    statuses: set[str] = set()
+    tags: set[str] = set()
+    words: list[str] = []
+    unknown: list[str] = []
+    names = {status.value for status in Status}
+    for token in query.split():
+        name, _, value = token.partition(":")
+        if name.lower() == "status" and value:
+            statuses.add(value.lower())
+            if value.lower() not in names and value.lower() not in unknown:
+                unknown.append(value.lower())
+        elif name.lower() == "tag" and value:
+            tags.add(value.casefold())
+        else:
+            words.append(token.casefold())
+    return Query(statuses, tags, words, unknown)
+
+
 def filter_ideas(ideas: list[Idea], query: str, *, everything: bool = False) -> list[Idea]:
     """Filter by words plus `status:NAME` and `tag:NAME` tokens.
 
@@ -82,28 +110,18 @@ def filter_ideas(ideas: list[Idea], query: str, *, everything: bool = False) -> 
     title, tags or text (comments left out). Shipped and shelved ideas are hidden unless a
     status: token asks for them, or `everything` is True.
     """
-    statuses: set[str] = set()
-    tags: set[str] = set()
-    words: list[str] = []
-    for token in query.split():
-        name, _, value = token.partition(":")
-        if name.lower() == "status" and value:
-            statuses.add(value.lower())
-        elif name.lower() == "tag" and value:
-            tags.add(value.casefold())
-        else:
-            words.append(token.casefold())
+    q = parse_query(query)
 
     def keep(idea: Idea) -> bool:
-        if statuses:
-            if idea.status.value not in statuses:
+        if q.statuses:
+            if idea.status.value not in q.statuses:
                 return False
         elif idea.status.terminal and not everything:
             return False
-        if tags and not tags & {t.casefold() for t in idea.tags}:
+        if q.tags and not q.tags & {t.casefold() for t in idea.tags}:
             return False
         body = sections.strip_comments(idea.body)
         text = " ".join([idea.id, idea.title, *idea.tags, body]).casefold()
-        return all(word in text for word in words)
+        return all(word in text for word in q.words)
 
     return [idea for idea in ideas if keep(idea)]
