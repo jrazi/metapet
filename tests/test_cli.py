@@ -1,6 +1,7 @@
 import datetime as dt
 import io
 import json
+import re
 
 from rich.console import Console
 from typer.testing import CliRunner
@@ -698,7 +699,8 @@ def _shell_complete(home, words: str, cword: int) -> list[str]:
     """Ask the CLI for bash completions, the way the installed shell script does."""
     env = {
         "_PET_COMPLETE": "complete_bash",
-        "COMP_WORDS": f"pet --home {home.path} {words}",
+        # Quoted: the words are split like a shell would, and Windows paths have backslashes.
+        "COMP_WORDS": f"pet --home '{home.path}' {words}",
         "COMP_CWORD": str(cword + 2),
     }
     result = runner.invoke(app, [], env=env, prog_name="pet")
@@ -730,6 +732,7 @@ def test_list_and_find_aliases(home):
     assert pet(home, "find", "budget").output == pet(home, "search", "budget").output
     assert "budget-tracker" in pet(home, "find", "budget").output
     help_text = runner.invoke(app, ["--help"], env={"COLUMNS": "200"}).output
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", help_text)  # CI turns colour on
     assert "│ list " not in help_text and "│ find " not in help_text
     assert "│ ls " in help_text
 
