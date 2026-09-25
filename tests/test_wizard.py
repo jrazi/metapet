@@ -171,3 +171,13 @@ def test_ask_title_repeats_until_given(store):
     s, p = session(store, ["", "  ", "Budget tracker"])
     assert wizard.ask_title(s) == "Budget tracker"
     assert p.messages == ["A title is needed.", "A title is needed."]
+
+
+def test_empty_list_answer_keeps_the_items(store):
+    idea = sketch_idea(store)
+    stages.move(idea, Status.SPEC, S)
+    fields.put(idea, S.field("features"), ["search", "export"], S.section_order)
+    store.save(idea)
+    s, _ = session(store, [[]])
+    assert wizard.ask_field(s, idea, S.field("features")) is False
+    assert fields.get(on_disk(store, idea), S.field("features")) == ["search", "export"]

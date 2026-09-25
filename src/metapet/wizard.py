@@ -76,7 +76,7 @@ def _ask(s: Session, idea: Idea, f: Field) -> fields.Value:
 def ask_field(s: Session, idea: Idea, f: Field) -> bool:
     """Ask one field; when the answer changes it, store it, touch the idea and save."""
     value = _ask(s, idea, f)
-    if value is None or value == fields.get(idea, f):
+    if value is None or value == [] or value == fields.get(idea, f):
         return False
     fields.put(idea, f, value, s.schema.section_order)
     idea.touch()

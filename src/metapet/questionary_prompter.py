@@ -111,7 +111,8 @@ class QuestionaryPrompter:
             if not item:
                 break
             result.append(item)
-        return None if result == current else result
+        # An empty list is a skip, not a request to clear: clearing is done with pet set.
+        return None if not result or result == current else result
 
     def scale(
         self, question: str, *, hint: str | None = None, default: int | None = None

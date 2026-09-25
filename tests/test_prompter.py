@@ -82,3 +82,9 @@ def test_tag_completion_uses_the_part_after_the_last_comma():
     assert found == ["cli", "Client"]
     found = [c.text for c in completer.get_completions(Document("cli, "), None)]
     assert found == ["Client", "web"]
+
+
+def test_items_dropping_all_and_adding_none_is_a_skip():
+    assert ask("n" + ENTER, "items", "Features?", current=["a", "b"]) is None
+    assert ask("y" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["a", "c"]
+    assert ask("n" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["c"]
