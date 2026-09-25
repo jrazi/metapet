@@ -1,10 +1,13 @@
 import datetime as dt
+import io
 import json
 
+from rich.console import Console
 from typer.testing import CliRunner
 
 from metapet import cli
 from metapet.cli import app
+from metapet.model import Idea
 from metapet.prompter import ScriptedPrompter
 
 runner = CliRunner()
@@ -398,7 +401,7 @@ def test_review_without_a_terminal_lists_due_ideas(home):
     result = pet(home, "review")
     assert result.exit_code == 0, result.output
     assert "budget-tracker" in result.output and "recipe-box" not in result.output
-    assert "last seen" in result.output and "2020-01-01" in result.output
+    assert "2020-01-01" in result.output
     assert "Run pet review in a terminal to go through them." in result.output
     assert "reviewed:" not in idea_text(home, "budget-tracker")
 
@@ -565,3 +568,64 @@ def test_new_long_title_in_a_terminal_goes_to_summary(home, monkeypatch):
     text = idea_text(home, "downloads-tidier")
     assert "title: Downloads tidier" in text
     assert f"First line.\n\n{LONG}" in text
+
+
+def wide_ideas():
+    return [
+        Idea(id="x" * 60, title="T" * 200, tags=[f"tag{n}" for n in range(8)], excitement=3),
+        Idea(id="short", title="Short one"),
+    ]
+
+
+def render(table, width):
+    out = io.StringIO()
+    Console(width=width, file=out, force_terminal=True, color_system=None).print(table)
+    return out.getvalue().splitlines()
+
+
+def test_table_one_line_per_idea_at_80(monkeypatch):
+    ideas = wide_ideas()
+    lines = render(cli._ideas_table(ideas, width=80), 80)
+    assert len(lines) == len(ideas) + 1
+    assert "title" in lines[0] and "status" in lines[0]
+    assert all("seed" in line for line in lines[1:])
+    assert "…" in lines[1]
+    assert all(len(line) <= 80 for line in lines)
+
+
+def test_table_drops_low_priority_columns_first():
+    ideas = wide_ideas()
+    narrow = render(cli._ideas_table(ideas, width=80), 80)[0]
+    assert "created" not in narrow and "exc" in narrow
+    wide = render(cli._ideas_table(ideas, width=160), 160)[0]
+    for name in ("id", "title", "status", "exc", "tags", "imp", "effort", "created"):
+        assert name in wide
+
+
+def test_ls_piped_is_tab_separated(home):
+    pet(home, "init")
+    pet(home, "add", "Telegram bot that forwards RSS feeds", "-t", "telegram", "-t", "bot")
+    lines = pet(home, "ls").output.splitlines()
+    assert len(lines) == 1
+    parts = lines[0].split("\t")
+    assert len(parts) == 8
+    assert parts[:4] == [
+        "telegram-bot-that-forwards-rss-feeds",
+        "seed",
+        "Telegram bot that forwards RSS feeds",
+        "telegram,bot",
+    ]
+    scored = pet(home, "ls", "--sort", "score").output.splitlines()[0].split("\t")
+    assert len(scored) == 9
+
+
+def test_check_reports_long_ids(home):
+    pet(home, "init")
+    long_id = "a" * 60
+    (home.ideas / f"{long_id}.md").write_text(
+        f"---\nid: {long_id}\ntitle: Long\nstatus: seed\ncreated: 2026-01-01\n---\n"
+    )
+    result = pet(home, "check")
+    assert f"{long_id}.md: id is longer than 40 characters; shorten it with pet rename" in (
+        result.output
+    )

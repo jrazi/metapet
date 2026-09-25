@@ -172,6 +172,13 @@ shows the stages and field keys in use, and `pet check` reports mistakes in your
 | `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |
 | `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump |
 
+In a terminal, `ls`, `search`, `next` and `review` show a table with one line per idea;
+when the terminal is narrow, long titles are cut with `…` and the least important
+columns (created, effort, impact, tags, excitement) are left out. When the output goes
+to a pipe or a file, they print one tab-separated line per idea instead, with no
+header: id, status, title, tags (comma separated), excitement, impact, effort, created,
+then any extra column (score, last seen). For example, `pet ls | grep -c seed`.
+
 The title is a short name. When the title given to `add` or `new` is longer than 60
 characters or 8 words, its first words become the title and the full text is kept as
 the summary; in a terminal, `new` asks first. `add`, `new` and `promote` print the id;

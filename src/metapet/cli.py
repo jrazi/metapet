@@ -7,8 +7,9 @@ import sys
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated, Literal, NoReturn
 
 import click
 import typer
@@ -220,36 +221,113 @@ def _status(status: Status) -> str:
     return f"[{STATUS_STYLE[status]}]{status.value}[/]"
 
 
-def _ideas_table(
-    ideas: list[Idea], extra: dict[str, list[str]] | None = None, *, created: bool = True
-) -> Table:
-    """A table of ideas; extra columns are never cut, so narrow terminals shrink the title."""
-    table = Table(box=None, header_style="bold", pad_edge=False)
-    table.add_column("id", style="bold", no_wrap=True, min_width=max(len(i.id) for i in ideas))
-    table.add_column("title")
-    table.add_column("status")
-    table.add_column("exc", justify="right")
-    table.add_column("imp", justify="right")
-    table.add_column("effort")
-    table.add_column("tags", style="dim")
+TITLE_MIN = 16
+TAGS_MAX = 20
+COLUMN_GAP = 2
+# Columns left out, in this order, when the table is wider than the terminal.
+DROP_ORDER = ("created", "effort", "imp", "tags", "exc")
+
+
+@dataclass
+class _Column:
+    name: str
+    cells: list[Text]
+    justify: Literal["left", "right"] = "left"
+    style: str = ""
+    cap: int | None = None
+
+    def natural(self) -> int:
+        """The width it needs for its longest cell, within its cap; title counts as TITLE_MIN."""
+        if self.name == "title":
+            return TITLE_MIN
+        width = max([len(self.name), *(cell.cell_len for cell in self.cells)])
+        return min(width, self.cap) if self.cap else width
+
+
+def _idea_columns(
+    ideas: list[Idea], extra: dict[str, list[str]] | None, created: bool
+) -> list[_Column]:
+    def column(name: str, values: list[str], **kwargs) -> _Column:
+        return _Column(name, [Text(value) for value in values], **kwargs)
+
+    columns = [
+        column("id", [i.id for i in ideas], style="bold", cap=ids.ID_MAX),
+        column("title", [i.title for i in ideas]),
+        _Column("status", [Text(i.status.value, style=STATUS_STYLE[i.status]) for i in ideas]),
+        *(column(name, values, justify="right") for name, values in (extra or {}).items()),
+        column("exc", [str(i.excitement or "") for i in ideas], justify="right"),
+        column("tags", [", ".join(i.tags) for i in ideas], style="dim", cap=TAGS_MAX),
+        column("imp", [str(i.impact or "") for i in ideas], justify="right"),
+        column("effort", [i.effort.value if i.effort else "" for i in ideas]),
+    ]
     if created:
-        table.add_column("created", style="dim", no_wrap=True)
-    for name, values in (extra or {}).items():
-        width = max(len(name), *(len(value) for value in values))
-        table.add_column(name, justify="right", no_wrap=True, min_width=width)
+        columns.append(column("created", [i.created.isoformat() for i in ideas], style="dim"))
+    return columns
+
+
+def _total(columns: list[_Column]) -> int:
+    return sum(c.natural() for c in columns) + COLUMN_GAP * (len(columns) - 1)
+
+
+def _fit_columns(columns: list[_Column], width: int) -> list[_Column]:
+    """Leave out low-priority columns until the rest fit in width."""
+    kept = list(columns)
+    for name in DROP_ORDER:
+        if _total(kept) <= width:
+            break
+        kept = [c for c in kept if c.name != name]
+    return kept
+
+
+def _ideas_table(
+    ideas: list[Idea],
+    extra: dict[str, list[str]] | None = None,
+    *,
+    created: bool = True,
+    width: int | None = None,
+) -> Table:
+    """A table of ideas with one line per idea, fitted to the terminal width."""
+    width = width or console.width
+    columns = _fit_columns(_idea_columns(ideas, extra, created), width)
+    table = Table(box=None, header_style="bold", pad_edge=False)
+    for col in columns:
+        size = col.natural()
+        if col.name == "title":
+            longest = max([len(col.name), *(cell.cell_len for cell in col.cells)])
+            size = min(longest, max(TITLE_MIN, width - (_total(columns) - TITLE_MIN)))
+        table.add_column(
+            col.name,
+            justify=col.justify,
+            style=col.style,
+            no_wrap=True,
+            overflow="ellipsis",
+            width=size,
+        )
+    for row in range(len(ideas)):
+        table.add_row(*(col.cells[row] for col in columns))
+    return table
+
+
+def _print_ideas(
+    ideas: list[Idea], extra: dict[str, list[str]] | None = None, *, created: bool = True
+) -> None:
+    """A table in a terminal; otherwise one tab-separated line per idea, for scripts."""
+    if console.is_terminal:
+        console.print(_ideas_table(ideas, extra, created=created))
+        return
     for row, idea in enumerate(ideas):
-        table.add_row(
-            Text(idea.id),
-            Text(idea.title),
-            _status(idea.status),
+        values = [
+            idea.id,
+            idea.status.value,
+            idea.title,
+            ",".join(idea.tags),
             str(idea.excitement or ""),
             str(idea.impact or ""),
             idea.effort.value if idea.effort else "",
-            Text(", ".join(idea.tags)),
-            *([idea.created.isoformat()] if created else []),
-            *[values[row] for values in (extra or {}).values()],
-        )
-    return table
+            idea.created.isoformat(),
+            *(values[row] for values in (extra or {}).values()),
+        ]
+        typer.echo("\t".join(" ".join(value.split()) for value in values))
 
 
 def _stars(value: int) -> str:
@@ -561,7 +639,8 @@ def list_ideas(
     if not ideas:
         console.print('[dim]No ideas match. Capture one with[/] pet add "..."')
         return
-    console.print(_ideas_table(ideas))
+    extra = {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == "score" else None
+    _print_ideas(ideas, extra)
 
 
 @app.command()
@@ -810,8 +889,8 @@ def review(
         return
     if not _interactive(no_input):
         seen = [review_.last_seen(idea).isoformat() for idea in ideas]
-        console.print(_ideas_table(ideas, {"last seen": seen}, created=False))
-        console.print("Run pet review in a terminal to go through them.")
+        _print_ideas(ideas, {"last seen": seen}, created=False)
+        err.print("Run pet review in a terminal to go through them.")
         return
     result = review_.run(_session(store, idea_schema), ideas)
     console.print(f"Reviewed {result.handled}, {result.remaining} left.")
@@ -857,7 +936,7 @@ def search(ctx: typer.Context, text: Annotated[str, typer.Argument()]) -> None:
     if not hits:
         console.print(f"[dim]Nothing mentions '{escape(text)}'.[/]")
         return
-    console.print(_ideas_table(hits))
+    _print_ideas(hits)
 
 
 @app.command("next")
@@ -876,7 +955,7 @@ def next_(
         console.print('[dim]No live ideas. Capture one with[/] pet add "..."')
         return
     ideas = [idea for idea, _ in ranked]
-    console.print(_ideas_table(ideas, {"score": [f"{value:.2f}" for _, value in ranked]}))
+    _print_ideas(ideas, {"score": [f"{value:.2f}" for _, value in ranked]})
 
 
 @app.command("random")
@@ -930,6 +1009,13 @@ def check(ctx: typer.Context) -> None:
     mismatched = [i for i in ideas if i.path and i.path.stem != i.id]
     for bad in broken:
         err.print(f"[red]✗[/] {escape(bad.path.name)}: {escape(bad.error)}")
+    for idea in ideas:
+        if len(idea.id) > ids.ID_MAX and idea.path:
+            err.print(
+                f"[yellow]![/] {escape(idea.path.name)}: id is longer than {ids.ID_MAX} "
+                "characters; shorten it with pet rename",
+                soft_wrap=True,
+            )
     for idea in mismatched:
         err.print(
             f"[yellow]![/] {escape(idea.path.name)}: id is '{escape(idea.id)}' "
