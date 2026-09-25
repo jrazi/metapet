@@ -59,3 +59,11 @@ def test_validate_accepts(text, expected):
 def test_validate_rejects(text):
     with pytest.raises(ValueError, match="lowercase letters, digits and single hyphens"):
         ids.validate(text)
+
+
+def test_with_suffix_keeps_whole_words():
+    base = "one-two-three-four-five-six-seven-eight"
+    assert ids.with_suffix(base, 2) == "one-two-three-four-five-six-seven-2"
+    assert ids.with_suffix("short", 3) == "short-3"
+    assert ids.with_suffix("x" * 40, 2) == "x" * 38 + "-2"
+    assert len(ids.with_suffix("apps-for-the-" + "y" * 30, 12)) <= ids.ID_MAX

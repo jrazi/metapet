@@ -71,6 +71,17 @@ def validate(text: str) -> str:
 
 
 def with_suffix(base: str, n: int) -> str:
-    """base-n, shortening base so the result still fits in ID_MAX."""
+    """base-n, dropping whole words from the end of base so the result fits in ID_MAX."""
     suffix = f"-{n}"
-    return base[: ID_MAX - len(suffix)].rstrip("-") + suffix
+    room = ID_MAX - len(suffix)
+    if len(base) <= room:
+        return base + suffix
+    kept: list[str] = []
+    for word in base.split("-"):
+        if len("-".join([*kept, word])) > room:
+            break
+        kept.append(word)
+    while len(kept) > 1 and kept[-1] in STOP_WORDS:
+        kept.pop()
+    head = "-".join(kept) if kept else base[:room].rstrip("-")
+    return head + suffix
