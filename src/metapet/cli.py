@@ -18,8 +18,33 @@ from metapet import export, paths, scoring, stages, sync
 from metapet.model import Effort, Idea, Status
 from metapet.store import IdeaLookupError, Store
 
+
+def _lifecycle_help() -> str:
+    described = stages.describe()
+    name_w = max(len(status.value) for status, _, _ in described)
+    meaning_w = max(len(meaning) for _, meaning, _ in described)
+    rows = []
+    for status, meaning, sections in described:
+        adds = f"adds: {', '.join(sections)}" if sections else ""
+        rows.append(f"  {status.value:<{name_w}}  {meaning:<{meaning_w}}  {adds}".rstrip())
+    return (
+        "[bold]Lifecycle:[/] seed → sketch → spec → building → shipped, or shelved at any point.\n"
+        + "\n".join(rows)
+        + "\n\n"
+        "[bold]Structure is loose:[/] only the frontmatter is validated (pet check). The sections "
+        "promote adds are prompts, not rules: fill them, delete them, or add your own; promote "
+        "never overwrites what you wrote. Replace a stage's sections with "
+        "<data home>/templates/<sketch|spec|building|retro>.md."
+    )
+
+
+LIFECYCLE_HELP = _lifecycle_help()
+
 app = typer.Typer(
-    help="Capture and grow pet-project ideas.",
+    help="Capture and grow pet-project ideas.\n\n"
+    + LIFECYCLE_HELP
+    + "\n\n[bold]Tab completion[/] (commands and idea ids): pet --install-completion, "
+    "then open a new shell.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -73,6 +98,28 @@ def _find(store: Store, query: str) -> Idea:
             ids = "\n".join(f"  • {i.id}  [dim]{i.title}[/]" for i in exc.candidates)
             _fail(f"{exc}; be more specific:\n{ids}")
         _fail(str(exc))
+
+
+def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
+    """Shell completion for idea ids; completion must never fail loudly."""
+    try:
+        home = paths.resolve(ctx.find_root().params.get("home"))
+        ideas = Store(home).all()
+    except Exception:
+        return []
+    # Shells only offer candidates that extend the typed word, so match by id prefix.
+    matches = [i for i in ideas if i.id.startswith(incomplete.lower())]
+    return [(idea.id, idea.title) for idea in sorted(matches, key=lambda i: i.id)]
+
+
+IdArg = Annotated[
+    str,
+    typer.Argument(
+        metavar="ID",
+        help="Idea id; any unique prefix or fragment of the id or title works.",
+        autocompletion=_complete_ids,
+    ),
+]
 
 
 def _status(status: Status) -> str:
@@ -188,7 +235,10 @@ def add(
     tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Tag (repeatable).")] = None,
     note: Annotated[str | None, typer.Option("--note", "-m", help="One-line description.")] = None,
 ) -> None:
-    """Capture a seed instantly, without opening an editor."""
+    """Capture a seed instantly, without opening an editor.
+
+    Grow it later with pet promote ID (see pet promote --help for the stages).
+    """
     store = _store(ctx)
     idea = store.create(title, tags=list(tag or []), body=note or "")
     console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
@@ -242,7 +292,10 @@ def list_ideas(
         bool, typer.Option("--all", "-a", help="Include shipped and shelved ideas.")
     ] = False,
 ) -> None:
-    """List ideas."""
+    """List ideas.
+
+    Shipped and shelved ideas are hidden unless you pass --all or filter by --status.
+    """
     ideas = _store(ctx).all()
     if status:
         ideas = [i for i in ideas if i.status in status]
@@ -267,13 +320,13 @@ def list_ideas(
 
 
 @app.command()
-def show(ctx: typer.Context, idea_id: Annotated[str, typer.Argument(metavar="ID")]) -> None:
+def show(ctx: typer.Context, idea_id: IdArg) -> None:
     """Show one idea."""
     _print_idea(_find(_store(ctx), idea_id))
 
 
 @app.command()
-def edit(ctx: typer.Context, idea_id: Annotated[str, typer.Argument(metavar="ID")]) -> None:
+def edit(ctx: typer.Context, idea_id: IdArg) -> None:
     """Open an idea in $EDITOR."""
     idea = _find(_store(ctx), idea_id)
     click.edit(filename=str(idea.path))
@@ -282,15 +335,19 @@ def edit(ctx: typer.Context, idea_id: Annotated[str, typer.Argument(metavar="ID"
 # -- lifecycle ---------------------------------------------------------------
 
 
-@app.command()
+@app.command(
+    help="Move an idea to its next stage, adding that stage's sections.\n\n"
+    "Moves one stage forward by default. --to can skip stages (each skipped stage still adds "
+    "its sections) or move back (adds and removes nothing). A shelved idea returns with "
+    "--to STAGE.\n\n" + LIFECYCLE_HELP
+)
 def promote(
     ctx: typer.Context,
-    idea_id: Annotated[str, typer.Argument(metavar="ID")],
+    idea_id: IdArg,
     to: Annotated[
         Status | None, typer.Option("--to", help="Target status (default: the next one).")
     ] = None,
 ) -> None:
-    """Move an idea to its next stage, adding that stage's sections."""
     store = _store(ctx)
     idea = _find(store, idea_id)
     target = to or idea.status.next()
@@ -311,10 +368,14 @@ def promote(
 @app.command()
 def shelve(
     ctx: typer.Context,
-    idea_id: Annotated[str, typer.Argument(metavar="ID")],
+    idea_id: IdArg,
     reason: Annotated[str, typer.Argument(help="Why you're putting it aside.")],
 ) -> None:
-    """Shelve an idea, keeping the reason for future you."""
+    """Shelve an idea, keeping the reason for future you.
+
+    Shelved ideas are hidden from ls and next (see them with ls -a) and gain a Retro section.
+    Bring one back with: pet promote ID --to STAGE.
+    """
     store = _store(ctx)
     idea = _find(store, idea_id)
     stages.move(idea, Status.SHELVED, ctx.obj)
