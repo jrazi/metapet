@@ -20,6 +20,8 @@ from metapet.prompter import PartialAnswer
 from metapet.views import Card
 
 SKIP = "Skip"
+QMARK_STYLE = "#5f819d"  # the colour questionary uses for the ? before a question
+SCALE_KEYS = "(1-5, or arrows and Enter)"
 LONG_SKIP = "Enter skips; e opens your editor"
 LONG_KEEP = "Enter keeps the current answer; e opens your editor"
 
@@ -54,6 +56,11 @@ def resolve_long(
     return answer or None
 
 
+def _join(hint: str | None, instruction: str) -> str:
+    """A field's hint followed by how to answer, for the question line."""
+    return f"{hint} {instruction}" if hint else instruction
+
+
 def _ask(question: questionary.Question) -> Any:
     """Ask, turning Ctrl-D (EOFError) into Ctrl-C so both stop the questions the same way."""
     try:
@@ -76,7 +83,8 @@ class TagCompleter(Completer):
         for tag in self.known:
             folded = tag.casefold()
             if folded.startswith(word.casefold()) and folded not in entered:
-                yield Completion(tag, start_position=-len(word))
+                # The separator is added so the next tag can be typed at once.
+                yield Completion(tag + ", ", start_position=-len(word), display=tag)
 
 
 class QuestionaryPrompter:
@@ -109,12 +117,10 @@ class QuestionaryPrompter:
         return _ask(answer).strip() or None
 
     def long(self, question: str, *, hint: str | None = None, current: str = "") -> str | None:
-        if hint:
-            self.console.print(f"[dim]{escape(hint)}[/]")
         if current:
             self.console.print("[dim]Current answer:[/]")
             self.console.print(current, markup=False, highlight=False)
-        instruction = LONG_KEEP if current else LONG_SKIP
+        instruction = _join(hint, LONG_KEEP if current else LONG_SKIP)
         while True:
             raw = _ask(questionary.text(question, instruction=instruction, **self.io))
             answer = resolve_long(raw, current, notify=self.message)
@@ -122,18 +128,29 @@ class QuestionaryPrompter:
                 return answer
 
     def items(
-        self, question: str, *, hint: str | None = None, current: list[str]
+        self,
+        question: str,
+        *,
+        hint: str | None = None,
+        current: list[str],
+        clear: str | None = None,
     ) -> list[str] | None:
-        self.console.print(f"[bold]{escape(question)}[/]")
+        """Ask for list items one per line; `clear` is the command that clears the list."""
+        line = f"[{QMARK_STYLE}]?[/] [bold]{escape(question)}[/]"
         if hint:
-            self.console.print(f"[dim]{escape(hint)}[/]")
+            line += f" [dim]{escape(hint)}[/]"
+        self.console.print(line, highlight=False)
         result: list[str] = []
+        dropped = False
         if current:
             for item in current:
-                self.console.print(f"  - {escape(item)}")
-            keep = questionary.confirm(f"Keep these {len(current)} items?", default=True, **self.io)
-            if _ask(keep):
+                self.console.print(f"  - {escape(item)}", highlight=False)
+            count = len(current)
+            ask = "Keep this item?" if count == 1 else f"Keep these {count} items?"
+            if _ask(questionary.confirm(ask, default=True, **self.io)):
                 result = list(current)
+            else:
+                dropped = True
         kept = len(result)
         while True:
             prompt = f"  item {len(result) + 1} (Enter to finish)"
@@ -146,14 +163,33 @@ class QuestionaryPrompter:
             if not item:
                 break
             result.append(item)
+        if dropped and not result:
+            count = len(current)
+            text = f"No items given; kept the {count} item{'' if count == 1 else 's'}."
+            if clear:
+                text += f" Clear the list with {clear}."
+            self.message(text)
         # An empty list is a skip, not a request to clear: clearing is done with pet set.
         return None if not result or result == current else result
 
     def scale(
         self, question: str, *, hint: str | None = None, default: int | None = None
     ) -> int | None:
-        options = [str(n) for n in range(1, 6)]
-        answer = self._pick(question, options, hint, str(default) if default else None)
+        choices = [
+            questionary.Choice(SKIP, value="", shortcut_key="0"),
+            *(questionary.Choice(str(n), value=str(n), shortcut_key=str(n)) for n in range(1, 6)),
+        ]
+        start = str(default) if default else ""
+        answer = _ask(
+            questionary.select(
+                question,
+                choices=choices,
+                default=start,
+                instruction=_join(hint, SCALE_KEYS),
+                use_shortcuts=True,
+                **self.io,
+            )
+        )
         return int(answer) if answer else None
 
     def choice(
@@ -164,17 +200,12 @@ class QuestionaryPrompter:
         hint: str | None = None,
         default: str | None = None,
     ) -> str | None:
-        return self._pick(question, list(choices), hint, default)
-
-    def _pick(
-        self, question: str, options: list[str], hint: str | None, default: str | None
-    ) -> str | None:
         """A select with Skip first; returns None for Skip."""
-        choices = [questionary.Choice(SKIP, value=""), *options]
-        start = default if default in options else ""
+        options = [questionary.Choice(SKIP, value=""), *choices]
+        start = default if default in choices else ""
         answer = _ask(
             questionary.select(
-                question, choices=choices, default=start, instruction=hint, **self.io
+                question, choices=options, default=start, instruction=hint, **self.io
             )
         )
         return answer or None
@@ -194,9 +225,13 @@ class QuestionaryPrompter:
         tags = [part.strip() for part in raw.split(",") if part.strip()]
         return tags or None
 
-    def select(self, question: str, options: list[tuple[str, str]]) -> str:
+    def select(
+        self, question: str, options: list[tuple[str, str]], *, default: str | None = None
+    ) -> str:
         choices = [questionary.Choice(label, value=value) for value, label in options]
-        return _ask(questionary.select(question, choices=choices, **self.io))
+        values = [value for value, _ in options]
+        start = default if default in values else None
+        return _ask(questionary.select(question, choices=choices, default=start, **self.io))
 
     def confirm(self, question: str, *, default: bool = False) -> bool:
         return _ask(questionary.confirm(question, default=default, **self.io))

@@ -22,8 +22,8 @@ store = "summary"
 [[seed.fields]]
 key = "tags"
 label = "Tags"
-question = "Tags?"
-hint = "Comma separated."
+question = "Tags"
+hint = "Comma separated. Tab completes tags you already use."
 kind = "tags"
 store = "frontmatter"
 

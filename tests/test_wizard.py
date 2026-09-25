@@ -208,17 +208,20 @@ def test_dated_list_items_get_todays_date(store):
     assert "## Notes\n- old note\n- 2026-01-02: new note" in on_disk(store, idea).body
 
 
-def test_refine_picker_markers_follow_answers(store):
+def test_refine_picker_labels_and_default(store):
     idea = store.create("Budget tracker")
     s, p = session(store, ["summary", "Track spending.", ""])
     wizard.refine(s, idea, None)
-    first, second = (kwargs["options"] for method, _, kwargs in p.calls if method == "select")
-    assert ("summary", "[ ] Summary  (seed)") in first
-    assert ("summary", "[x] Summary  (seed)") in second
-    assert ("title", "[x] Title  (seed)") in first
-    assert ("notes", "[ ] Notes  (any stage)") in first
-    assert first[-1] == ("", "Done")
-    assert "problem" not in {value for value, _ in first}  # later stage
+    first, second = ((kw["options"], kw["default"]) for m, _, kw in p.calls if m == "select")
+    options, default = first
+    assert options[0] == ("", "Done") and default is None
+    assert ("summary", "· Summary (seed)") in options
+    assert ("title", "✓ Title* (seed)") in options
+    assert ("notes", "· Notes (any stage)") in options
+    assert "problem" not in {value for value, _ in options}  # later stage
+    options, default = second
+    assert ("summary", "✓ Summary (seed)") in options
+    assert default == "tags"  # the field after summary
     assert on_disk(store, idea).body.strip() == "Track spending."
 
 

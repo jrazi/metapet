@@ -76,7 +76,9 @@ def _ask(s: Session, idea: Idea, f: Field) -> fields.Value:
     if f.kind == Kind.LIST:
         existing = list(current or [])
         try:
-            answer = p.items(f.question, hint=f.hint, current=existing)
+            answer = p.items(
+                f.question, hint=f.hint, current=existing, clear=f"pet set {idea.id} {f.key}="
+            )
         except PartialAnswer as exc:
             exc.value = _dated(s, f, existing, exc.value)
             raise
@@ -315,16 +317,22 @@ def refine(s: Session, idea: Idea, f: Field | None) -> None:
         ask_field(s, idea, f)
         return
     available = s.schema.fields_upto(idea.status)
+    keys = [item.key for item in available]
+    default: str | None = None
     while True:
         options = [
             (
                 item.key,
-                f"[{'x' if fields.is_filled(idea, item) else ' '}] {item.label}  ({_where(item)})",
+                f"{'✓' if fields.is_filled(idea, item) else '·'} {item.label}"
+                f"{'*' if item.required else ''} ({_where(item)})",
             )
             for item in available
         ]
         # Field keys start with a letter, so "" cannot clash with one.
-        choice = s.prompter.select("Which field?", [*options, ("", "Done")])
+        choice = s.prompter.select("Which field?", [("", "Done"), *options], default=default)
         if not choice:
             return
-        ask_field(s, idea, next(item for item in available if item.key == choice))
+        ask_field(s, idea, available[keys.index(choice)])
+        # Put the cursor on the next field, so the fields can be gone through in order.
+        following = keys.index(choice) + 1
+        default = keys[following] if following < len(keys) else ""

@@ -87,9 +87,30 @@ def test_tags():
 def test_tag_completion_uses_the_part_after_the_last_comma():
     completer = TagCompleter(["cli", "Client", "web"])
     found = [c.text for c in completer.get_completions(Document("web, CL"), None)]
-    assert found == ["cli", "Client"]
+    assert found == ["cli, ", "Client, "]
     found = [c.text for c in completer.get_completions(Document("cli, "), None)]
-    assert found == ["Client", "web"]
+    assert found == ["Client, ", "web, "]
+
+
+def test_tag_completion_adds_separator():
+    [completion] = TagCompleter(["telegram"]).get_completions(Document("te"), None)
+    assert completion.text == "telegram, " and completion.start_position == -2
+
+
+def test_scale_accepts_digit():
+    assert ask("3" + ENTER, "scale", "How much?") == 3
+    assert ask("0" + ENTER, "scale", "How much?", default=4) is None
+
+
+def test_items_keep_wording_singular():
+    out = io.StringIO()
+    with create_pipe_input() as pipe:
+        pipe.send_text("n" + ENTER + ENTER)
+        prompter = QuestionaryPrompter(Console(file=out, width=200), input=pipe, output=DummyOutput())
+        assert prompter.items("Features?", current=["a"], clear="pet set x features=") is None
+    assert "No items given; kept the 1 item. Clear the list with pet set x features=." in (
+        out.getvalue()
+    )
 
 
 def test_items_dropping_all_and_adding_none_is_a_skip():
