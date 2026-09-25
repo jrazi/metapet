@@ -19,6 +19,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from metapet import export, fields, paths, schema, scoring, stages, sync, wizard
+from metapet import review as review_
 from metapet.model import Idea, Status
 from metapet.prompter import Prompter
 from metapet.schema import Schema, SchemaError, Storage
@@ -637,6 +638,40 @@ def shelve(
     idea.shelved_reason = reason
     store.save(idea)
     console.print(f"{idea.id}: {_status(Status.SHELVED)}  [dim]{reason}[/]")
+
+
+@app.command()
+def review(
+    ctx: typer.Context,
+    days: Annotated[
+        int,
+        typer.Option("--days", "-d", min=0, help="Ideas not looked at for this many days."),
+    ] = 14,
+    no_input: NoInput = False,
+) -> None:
+    """Go through live ideas you have not looked at for a while.
+
+    An idea counts as looked at when it was created, changed or reviewed. In a terminal,
+    shows each idea, oldest first, and asks what to do with it: promote, refine, add a note,
+    set excitement, shelve, skip or quit. Anything but quit marks the idea as reviewed.
+    Outside a terminal, or with --no-input, only lists the ideas.
+    """
+    store = _store(ctx)
+    idea_schema = _schema(ctx)
+    ideas = review_.due(store.all(), days)
+    if not ideas:
+        console.print(f"Nothing to review. Everything was looked at in the last {days} days.")
+        return
+    if not _interactive(no_input):
+        seen = [review_.last_seen(idea).isoformat() for idea in ideas]
+        console.print(_ideas_table(ideas, {"last seen": seen}))
+        console.print("Run pet review in a terminal to go through them.")
+        return
+    result = review_.run(_session(store, idea_schema), ideas)
+    console.print(f"Reviewed {result.handled}, {result.remaining} left.")
+    if result.stopped:
+        err.print("Stopped. Answers so far are saved.")
+        raise typer.Exit(130)
 
 
 # -- discovery ---------------------------------------------------------------
