@@ -646,3 +646,28 @@ def test_show_prints_full_title_and_id(home):
     output = pet(home, "show", "flash").output
     assert "Problem" in output.split("Empty:")[0] and "Hard to review" in output
     assert "Empty: Who it's for" in output
+
+
+class FakeContext:
+    def __init__(self, home):
+        self.params = {"home": str(home.path)}
+
+    def find_root(self):
+        return self
+
+
+def test_completion_descriptions_are_one_line(home):
+    pet(home, "init")
+    pet(home, "add", "word " * 30, "--id", "spec")
+    [(idea_id, description)] = cli._complete_ids(FakeContext(home), "s")
+    assert idea_id == "spec"
+    assert "\n" not in description and len(description) <= 50 and description.endswith("…")
+
+
+def test_completion_falls_back_to_fragments(home):
+    pet(home, "init")
+    pet(home, "add", "داشبورد خانگی", "--id", "dashboard")
+    pet(home, "add", "Telegram bot")
+    assert [i for i, _ in cli._complete_ids(FakeContext(home), "خانگی")] == ["dashboard"]
+    assert [i for i, _ in cli._complete_ids(FakeContext(home), "bot")] == ["telegram-bot"]
+    assert [i for i, _ in cli._complete_ids(FakeContext(home), "tel")] == ["telegram-bot"]

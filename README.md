@@ -30,7 +30,8 @@ pet --install-completion   # bash, zsh, fish or PowerShell; then open a new shel
 ```
 
 Completes commands, options and idea ids (`pet show sp<TAB>`); zsh and fish also
-show each idea's title. `pet --help` and `pet promote --help` explain the lifecycle
+show each idea's title. When no id starts with what you typed, ideas whose id or title
+contain it are offered instead (bash and fish show these; zsh may not). `pet --help` and `pet promote --help` explain the lifecycle
 and list each stage's fields.
 
 ## Where ideas live

@@ -182,9 +182,16 @@ def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
         ideas = Store(home).all()
     except Exception:
         return []
-    # Shells only offer candidates that extend the typed word, so match by id prefix.
-    matches = [i for i in ideas if i.id.startswith(incomplete.lower())]
-    return [(idea.id, idea.title) for idea in sorted(matches, key=lambda i: i.id)]
+    # Ids that start with the typed text; if there are none, ideas whose id or title
+    # contains it (bash and fish show these; zsh may hide what does not start with it).
+    typed = incomplete.casefold()
+    matches = [i for i in ideas if i.id.startswith(typed)] or [
+        i for i in ideas if typed in i.id or typed in i.title.casefold()
+    ]
+    return [
+        (idea.id, _cut(" ".join(idea.title.split()), 50))
+        for idea in sorted(matches, key=lambda i: i.id)
+    ]
 
 
 TITLE_HELP = "Short name for the idea, a few words (the id is made from it)."
