@@ -2,6 +2,8 @@ import datetime as dt
 import io
 import json
 import re
+import tomllib
+from pathlib import Path
 
 from rich.console import Console
 from typer.testing import CliRunner
@@ -25,7 +27,9 @@ def test_version_option():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0, result.output
     assert result.output == f"pet {__version__}\n"
-    assert __version__ == "0.1.0"
+    # The version is set only in pyproject.toml.
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    assert __version__ == tomllib.loads(pyproject.read_text("utf-8"))["project"]["version"]
 
 
 def test_commands_require_init(home):
