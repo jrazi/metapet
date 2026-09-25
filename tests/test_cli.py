@@ -79,3 +79,35 @@ def test_long_paths_are_never_wrapped(home, monkeypatch):
     assert pet(home, "where").output.startswith(str(home.path))
     added = pet(home, "add", "A very long idea title that makes a long path").output
     assert str(home.ideas / "a-very-long-idea-title-that-makes-a-long-path.md") in added
+
+
+def complete(home, words):
+    """Run pet's real bash completion for the given command line."""
+    line = f"pet --home '{home.path}' {words}"  # quoted: Windows paths have backslashes
+    # Index of the word being completed: a trailing space means a fresh, empty word.
+    cword = len(line.split()) - (0 if line.endswith(" ") else 1)
+    env = {"_PET_COMPLETE": "complete_bash", "COMP_WORDS": line, "COMP_CWORD": str(cword)}
+    result = runner.invoke(app, [], env=env, prog_name="pet")
+    return result.output.split()
+
+
+def test_completes_idea_ids_from_the_selected_home(home):
+    pet(home, "init")
+    pet(home, "add", "Telegram bot")
+    pet(home, "add", "Telegram game")
+    pet(home, "add", "Budget tracker")
+    assert complete(home, "show tel") == ["telegram-bot", "telegram-game"]
+    assert complete(home, "promote bud") == ["budget-tracker"]
+    assert complete(home, "edit ") == ["budget-tracker", "telegram-bot", "telegram-game"]
+
+
+def test_completion_is_silent_without_a_store(home):
+    assert complete(home, "show x") == []
+
+
+def test_help_explains_the_lifecycle(home):
+    for args in (["--help"], ["promote", "--help"]):
+        output = runner.invoke(app, args, env={"COLUMNS": "200"}).output
+        assert "seed → sketch → spec → building → shipped" in output
+        assert "adds: Problem, Rough solution" in output
+        assert "Structure is loose" in output
