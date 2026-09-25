@@ -115,9 +115,11 @@ def test_items_keep_wording_singular():
 
 
 def test_items_dropping_all_and_adding_none_is_a_skip():
-    assert ask("n" + ENTER, "items", "Features?", current=["a", "b"]) is None
-    assert ask("y" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["a", "c"]
-    assert ask("n" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["c"]
+    assert ask("n" + ENTER + ENTER, "items", "Features?", current=["a", "b"]) is None
+    keep_and_add = "y" + ENTER + "c" + ENTER + ENTER
+    assert ask(keep_and_add, "items", "Features?", current=["a"]) == ["a", "c"]
+    drop_and_add = "n" + ENTER + "c" + ENTER + ENTER
+    assert ask(drop_and_add, "items", "Features?", current=["a"]) == ["c"]
 
 
 def test_items_ctrl_c_keeps_the_items_entered():
@@ -148,3 +150,40 @@ def test_long_asks_again_after_editor_failure(monkeypatch):
 
     monkeypatch.setattr(qp.click, "edit", failing)
     assert ask("e" + ENTER + "typed" + ENTER, "long", "Problem?") == "typed"
+
+
+def prompter_with(pipe, out=None):
+    return QuestionaryPrompter(
+        Console(file=out or io.StringIO(), width=200), input=pipe, output=DummyOutput()
+    )
+
+
+def test_yes_waits_for_enter_so_the_next_answer_is_not_skipped():
+    with create_pipe_input() as pipe:
+        pipe.send_text("y" + ENTER + "Math is annoying" + ENTER)
+        prompter = prompter_with(pipe)
+        assert prompter.confirm("Go on to sketch?") is True
+        assert prompter.text("What problem does it solve?") == "Math is annoying"
+
+
+def test_hint_is_printed_on_its_own_line():
+    out = io.StringIO()
+    with create_pipe_input() as pipe:
+        pipe.send_text("Plant bot" + ENTER)
+        assert prompter_with(pipe, out).text("Short name?", hint="A few words.") == "Plant bot"
+    assert "  A few words." in out.getvalue()
+
+
+def test_editor_hint_is_dropped_after_the_editor_fails(monkeypatch):
+    import metapet.questionary_prompter as qp
+
+    def failing(**kwargs):
+        raise click.ClickException("vim: Editing failed")
+
+    monkeypatch.setattr(qp.click, "edit", failing)
+    out = io.StringIO()
+    with create_pipe_input() as pipe:
+        pipe.send_text("e" + ENTER + "typed" + ENTER)
+        assert prompter_with(pipe, out).long("Problem?") == "typed"
+    lines = [line.strip() for line in out.getvalue().splitlines()]
+    assert lines.index("Enter skips; e opens your editor") < lines.index("Enter skips")

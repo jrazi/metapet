@@ -24,6 +24,8 @@ QMARK_STYLE = "#5f819d"  # the colour questionary uses for the ? before a questi
 SCALE_KEYS = "(1-5, or arrows and Enter)"
 LONG_SKIP = "Enter skips; e opens your editor"
 LONG_KEEP = "Enter keeps the current answer; e opens your editor"
+LONG_SKIP_NO_EDITOR = "Enter skips"
+LONG_KEEP_NO_EDITOR = "Enter keeps the current answer"
 
 
 # Returned by resolve_long when the editor could not be opened: ask the question again.
@@ -111,20 +113,32 @@ class QuestionaryPrompter:
 
     # -- questions -------------------------------------------------------------
 
+    def _hint(self, hint: str | None) -> None:
+        """Print a hint on its own line, so it is not mixed up with the answer."""
+        if hint:
+            self.console.print(f"  [dim]{escape(hint)}[/]", highlight=False)
+
     def text(self, question: str, *, hint: str | None = None, default: str = "") -> str | None:
-        answer = questionary.text(question, default=default, instruction=hint, **self.io)
+        self._hint(hint)
+        answer = questionary.text(question, default=default, **self.io)
         return _ask(answer).strip() or None
 
     def long(self, question: str, *, hint: str | None = None, current: str = "") -> str | None:
         if current:
             self.console.print("[dim]Current answer:[/]")
             self.console.print(current, markup=False, highlight=False)
-        instruction = _join(hint, LONG_KEEP if current else LONG_SKIP)
+        editor = True
         while True:
-            raw = _ask(questionary.text(question, instruction=instruction, **self.io))
+            if editor:
+                how = LONG_KEEP if current else LONG_SKIP
+            else:
+                how = LONG_KEEP_NO_EDITOR if current else LONG_SKIP_NO_EDITOR
+            self._hint(_join(hint, how))
+            raw = _ask(questionary.text(question, **self.io))
             answer = resolve_long(raw, current, notify=self.message)
             if answer is not ASK_AGAIN:
                 return answer
+            editor = False
 
     def items(
         self,
@@ -146,7 +160,7 @@ class QuestionaryPrompter:
                 self.console.print(f"  - {escape(item)}", highlight=False)
             count = len(current)
             ask = "Keep this item?" if count == 1 else f"Keep these {count} items?"
-            if _ask(questionary.confirm(ask, default=True, **self.io)):
+            if _ask(questionary.confirm(ask, default=True, auto_enter=False, **self.io)):
                 result = list(current)
             else:
                 dropped = True
@@ -212,11 +226,11 @@ class QuestionaryPrompter:
     def tags(
         self, question: str, *, hint: str | None = None, current: list[str], known: list[str]
     ) -> list[str] | None:
+        self._hint(hint)
         raw = _ask(
             questionary.text(
                 question,
                 default=", ".join(current),
-                instruction=hint,
                 completer=TagCompleter(known),
                 **self.io,
             )
@@ -233,4 +247,4 @@ class QuestionaryPrompter:
         return _ask(questionary.select(question, choices=choices, default=start, **self.io))
 
     def confirm(self, question: str, *, default: bool = False) -> bool:
-        return _ask(questionary.confirm(question, default=default, **self.io))
+        return _ask(questionary.confirm(question, default=default, auto_enter=False, **self.io))
