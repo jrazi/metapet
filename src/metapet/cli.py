@@ -20,7 +20,19 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from metapet import export, fields, ids, paths, schema, scoring, stages, sync, views, wizard
+from metapet import (
+    export,
+    fields,
+    ids,
+    paths,
+    schema,
+    scoring,
+    sections,
+    stages,
+    sync,
+    views,
+    wizard,
+)
 from metapet import review as review_
 from metapet.model import Idea, IdeaError, Status, clean_title, is_long_title, short_title
 from metapet.prompter import Prompter
@@ -1148,13 +1160,23 @@ def check(ctx: typer.Context) -> None:
         idea_schema = schema.load(store.home)
     except SchemaError as exc:
         idea_schema = None
-        err.print(f"[red]✗[/] stages.toml: {escape(str(exc))}", soft_wrap=True)
+        err.print(f"[red]✗[/] {escape(str(exc))}", soft_wrap=True)
     if store.home.templates.is_dir():
         err.print(
             "[yellow]![/] templates/ is no longer used; stage fields now come from "
             "stages.toml (see README)"
         )
     if idea_schema is not None:
+        for idea in ideas:
+            body = sections.parse(idea.body)
+            for f in idea_schema.section_fields():
+                found = [sec for sec in body.sections if f.matches_heading(sec.heading)]
+                if len(found) > 1 and idea.path:
+                    err.print(
+                        f"[yellow]![/] {escape(idea.path.name)}: {_count_word(len(found))} "
+                        f"'{escape(f.label)}' sections; only the first is used",
+                        soft_wrap=True,
+                    )
         for idea in ideas:
             if idea.status.terminal:
                 continue
@@ -1168,6 +1190,10 @@ def check(ctx: typer.Context) -> None:
     if broken or idea_schema is None:
         raise typer.Exit(1)
     console.print(f"[green]✓[/] {len(ideas)} ideas OK")
+
+
+def _count_word(n: int) -> str:
+    return {2: "two", 3: "three"}.get(n, str(n))
 
 
 # -- backup & export ---------------------------------------------------------

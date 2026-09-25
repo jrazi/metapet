@@ -143,7 +143,9 @@ question = "How should it feel to use?"
 
 See [`src/metapet/stages.toml`](src/metapet/stages.toml) for the built-in file and
 every option (`kind`, `store`, `hint`, `choices`, `aliases`, `dated`). `pet stages`
-shows the stages and field keys in use, and `pet check` reports mistakes in your file. The old `templates/` folder is no longer used.
+shows the stages and field keys in use, and `pet check` reports mistakes in your file. Each field key can
+be used by one field only, and no two section fields can use the same heading (label,
+alias, or key with `_` read as a space). The old `templates/` folder is no longer used.
 
 ## Commands
 

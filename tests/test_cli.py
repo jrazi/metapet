@@ -805,3 +805,35 @@ def test_add_dedupes_tags(home):
     pet(home, "new", "V", "-t", "TELEGRAM", "-t", "telegram", "--no-input")
     assert idea_text(home, "v").count("telegram") == 1
     assert "bot 1" in pet(home, "stats").output
+
+
+def test_check_warns_duplicate_sections(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-m", "x")
+    path = home.ideas / "budget-tracker.md"
+    path.write_text(path.read_text() + "\n## Problem\none\n\n## problem\ntwo\n")
+    result = pet(home, "check")
+    assert result.exit_code == 0
+    assert "budget-tracker.md: two 'Problem' sections; only the first is used" in result.output
+
+
+def test_check_prints_stages_path_once(home):
+    pet(home, "init")
+    home.stages_file.write_text(
+        '[sketch]\n[[sketch.fields]]\nkey = "notes"\nlabel = "Problem"\nquestion = "Q?"\n'
+        '[[sketch.fields]]\nkey = "problem"\nlabel = "Problem"\nquestion = "Q?"\n',
+        encoding="utf-8",
+    )
+    result = pet(home, "check")
+    assert result.exit_code == 1
+    assert "✗" in result.output and "'notes'" in result.output
+    assert " ".join(result.output.split()).count(str(home.stages_file)) == 1
+
+
+def test_key_heading_is_not_empty(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    path = home.ideas / "budget-tracker.md"
+    path.write_text(path.read_text().replace("## Rough solution\n<!--", "## solution\nA CLI\n<!--"))
+    assert "Rough solution" not in pet(home, "check").output
