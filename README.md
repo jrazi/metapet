@@ -5,14 +5,10 @@
 [![CI](https://github.com/jrazi/metapet/actions/workflows/ci.yml/badge.svg)](https://github.com/jrazi/metapet/actions/workflows/ci.yml)
 [![License](https://img.shields.io/pypi/l/metapet)](https://github.com/jrazi/metapet/blob/main/LICENSE)
 
-A small command-line tool for keeping side-project ideas as Markdown files.
-
-Most side-project ideas end up as a line in a notes app or a message to yourself,
-and by the time you have a free weekend the context is gone. metapet gives each
-idea its own Markdown file and a stage. You save an idea with one command, then fill
-it in over time: what problem it solves, how it could work, what to build first.
-When you want to start something, `pet next` suggests an idea based on how much you
-want to build it and how much work it looks like.
+metapet is a command-line tool, `pet`, for keeping notes on side-project ideas. Each
+idea is a Markdown file with YAML frontmatter. An idea has a stage (seed, sketch,
+spec, building, shipped or shelved), and moving it to a new stage asks that stage's
+questions, such as what problem it solves or how it could work.
 
 ![The full-screen view of metapet](https://raw.githubusercontent.com/jrazi/metapet/main/docs/screenshot.svg)
 
@@ -29,7 +25,7 @@ called `pet`. To try it without installing, run `uvx --from metapet pet`.
 
 Run `pet init` once to create the folder where ideas are kept.
 
-### Save an idea
+### Adding ideas
 
 ```console
 $ pet add "Music library tagger" -t music -t cli \
@@ -39,11 +35,10 @@ $ pet add "Music library tagger" -t music -t cli \
 
 `pet new` does the same, but asks for each field instead.
 
-### Think it through
+### Stages
 
-Every idea has a stage: `seed`, `sketch`, `spec`, `building`, `shipped`, or
-`shelved` at any point. Moving an idea to the next stage asks that stage's questions.
-Press Enter to skip one.
+`pet promote` moves an idea to the next stage and asks that stage's questions.
+Enter skips a question.
 
 ```console
 $ pet promote music
@@ -59,14 +54,14 @@ Any part of an id that matches only one idea works, so `music` is enough. The an
 are saved as sections of the idea's file, and `pet refine music` lets you change them.
 `pet stages` lists the fields of each stage.
 
-### Add notes and ratings
+### Notes and ratings
 
 ```sh
 pet note music "beets can do this, but its import step is a lot for one folder"
 pet set music excitement=5 impact=3 effort=M
 ```
 
-### Decide what to work on
+### Listing ideas
 
 ```console
 $ pet ls
@@ -128,13 +123,13 @@ Fingerprint each file with AcoustID, look it up on MusicBrainz, show the changes
 
 ## Configuration
 
-**Where ideas are kept.** By default in `~/.local/share/metapet` on Linux,
+**Data folder.** Ideas are kept in `~/.local/share/metapet` on Linux,
 `~/Library/Application Support/metapet` on macOS and `%LOCALAPPDATA%\metapet` on
 Windows. Set `METAPET_HOME` or pass `--home PATH` to use another folder.
 `pet where` shows the folder in use.
 
-**Your own questions.** Put a `stages.toml` in that folder to replace the questions
-of any stage. The [built-in file](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
+**Custom stages.** A `stages.toml` in the data folder replaces the questions of any
+stage. The [built-in file](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
 shows the format, and `pet check` reports mistakes.
 
 **Backup.** `pet init --git --remote <url>` makes the folder a git repository, and
