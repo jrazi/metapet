@@ -514,7 +514,9 @@ class PetApp(App[None]):
             name = wizard.ask_name(s)
             if name is None:
                 return
-            idea = self.store.create(name.title, id=name.id, body=name.extra_summary or "")
+            idea = self.store.create(
+                name.title, id=name.id, body=fields.summary_text(name.extra_summary or "")
+            )
             created.append(idea.id)
             wizard.new_idea(s, idea, {"title"})
             wizard.continue_stages(s, idea)

@@ -1088,3 +1088,28 @@ def test_new_excitement_is_range_checked(home):
 def test_ls_help_lists_sort_choices():
     output = runner.invoke(app, ["ls", "--help"], env={"COLUMNS": "200"}).output
     assert "created" in output and "excitement" in output and "score" in output
+
+
+def test_search_rejects_an_unknown_status(home):
+    pet(home, "init")
+    result = pet(home, "search", "status:bogus")
+    assert result.exit_code == 1
+    assert "unknown status: bogus (seed, sketch, spec, building, shipped, shelved)" in result.output
+
+
+def test_edit_field_drops_the_placeholder_comment(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Plant bot")
+    pet(home, "promote", "plant")
+    monkeypatch.setattr(cli.click, "edit", lambda text="", **kwargs: text + "\nWater daily\n")
+    pet(home, "edit", "plant", "--field", "solution")
+    text = idea_text(home, "plant-bot")
+    assert "## Rough solution\nWater daily\n" in text
+
+
+def test_summary_starting_with_a_heading_stays_the_summary(home):
+    pet(home, "init")
+    pet(home, "add", "Notes app", "-m", "## Problem inside summary")
+    text = idea_text(home, "notes-app")
+    assert "### Problem inside summary" in text
+    assert "Problem inside summary" in pet(home, "show", "notes").output

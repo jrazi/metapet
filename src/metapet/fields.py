@@ -114,6 +114,11 @@ def put_text(idea: Idea, field: Field, text: str, order: Order) -> bool:
     return changed
 
 
+def summary_text(text: str) -> str:
+    """Text for the summary, with `## ` lines kept as text instead of starting a section."""
+    return demote_headings(text)[0].strip()
+
+
 def demote_headings(text: str) -> tuple[str, bool]:
     """Turn `## ` headings into `### ` so the text stays in one section."""
     demoted, count = sections.HEADING.subn(lambda m: "#" + m.group(0), text)

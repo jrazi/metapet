@@ -597,7 +597,9 @@ def add(
         _fail('a title is required: pet add "TITLE"')
     same = store.same_title(title)
     try:
-        idea = store.create(title, id=id_, tags=list(tag or []), body=note or "")
+        idea = store.create(
+            title, id=id_, tags=list(tag or []), body=fields.summary_text(note or "")
+        )
     except ValueError as exc:
         _fail(escape(str(exc)))
     _note_same(same)
@@ -841,7 +843,9 @@ def edit(
         _fail(f"'{field.key}' is stored in the frontmatter; use pet set ID {field.key}=VALUE")
     current = fields.raw(idea, field)
     edited = _editor(text=current, extension=".md")
-    if edited is None or edited.strip() == current.strip():
+    if edited is not None and sections.is_empty(current):
+        edited = sections.strip_comments(edited)
+    if edited is None or edited.strip() == current.strip() or not edited.strip():
         console.print(f"{escape(idea.id)}: no change")
         return
     demoted = fields.put_text(idea, field, edited, idea_schema.section_order)
@@ -1211,6 +1215,10 @@ def search(
     text = " ".join(query).strip()
     if not text:
         _fail("give words to search for")
+    unknown = views.parse_query(text).unknown_statuses
+    if unknown:
+        names = ", ".join(status.value for status in Status)
+        _fail(f"unknown status: {escape(', '.join(unknown))} ({names})")
     ideas, broken = _store(ctx).scan()
     hits = views.filter_ideas(ideas, text, everything=all_)
     if hits:
