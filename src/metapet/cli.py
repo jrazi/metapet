@@ -702,7 +702,7 @@ def new(
         if name.extra_summary:
             flagged[summary_key] = _join_summary(summary, name.extra_summary)
     idea = Idea(id=idea_id, title=clean_title(title))
-    fields.apply_changes(idea, idea_schema, _changes(flagged) + extra)
+    fields.apply_changes(idea, idea_schema, _changes(flagged) + extra, store.all_tags())
     idea.updated = None  # just created
     store.save(idea)
     _print_added(idea, verbose)
@@ -911,7 +911,9 @@ def set_(
     store = _store(ctx)
     idea = _find(store, idea_id)
     try:
-        done = fields.apply_changes(idea, _schema(ctx), fields.parse_changes(changes))
+        done = fields.apply_changes(
+            idea, _schema(ctx), fields.parse_changes(changes), store.all_tags()
+        )
     except ValueError as exc:
         _fail(escape(str(exc)))
     if not done:

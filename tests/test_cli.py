@@ -844,6 +844,19 @@ def test_add_dedupes_tags(home):
     assert "bot 1" in pet(home, "stats").output
 
 
+def test_set_uses_the_spelling_of_tags_in_use(home):
+    pet(home, "init")
+    pet(home, "add", "A", "-t", "bot", "-t", "telegram")
+    pet(home, "add", "B")
+    pet(home, "add", "C")
+    assert "tags: +bot" in pet(home, "set", "b", "+Bot").output
+    assert "- bot" in idea_text(home, "b") and "Bot" not in idea_text(home, "b")
+    pet(home, "set", "c", "tags=TELEGRAM, Bot, bot")
+    text = idea_text(home, "c")
+    assert "- telegram" in text and "- bot" in text
+    assert "TELEGRAM" not in text and "Bot" not in text
+
+
 def test_check_warns_duplicate_sections(home):
     pet(home, "init")
     pet(home, "add", "Budget tracker", "-m", "x")

@@ -78,10 +78,15 @@ def is_filled(idea: Idea, field: Field) -> bool:
 # -- writing -------------------------------------------------------------------
 
 
-def put(idea: Idea, field: Field, value: Value, order: Order) -> None:
-    """Store a value; None clears it. Does not touch() the idea."""
+def put(
+    idea: Idea, field: Field, value: Value, order: Order, known_tags: list[str] | None = None
+) -> None:
+    """Store a value; None clears it. Does not touch() the idea.
+
+    Tags take the spelling they already have on the idea, or else in `known_tags`.
+    """
     if field.storage == Storage.FRONTMATTER:
-        _put_frontmatter(idea, field, value)
+        _put_frontmatter(idea, field, value, known_tags)
     elif _is_list(field):
         put_text(idea, field, sections.render_items(list(value or [])), order)
     else:
@@ -115,7 +120,9 @@ def demote_headings(text: str) -> tuple[str, bool]:
     return demoted, count > 0
 
 
-def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:
+def _put_frontmatter(
+    idea: Idea, field: Field, value: Value, known_tags: list[str] | None = None
+) -> None:
     if field.kind == Kind.SCALE and value is not None and not 1 <= int(value) <= 5:
         raise ValueError(f"{field.key} must be a number from 1 to 5")
     if field.key not in KNOWN_KEYS:
@@ -127,7 +134,7 @@ def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:
     if field.key == "effort":
         value = Effort(str(value).upper()) if value else None
     elif field.key == "tags":
-        value = normalize_tags(list(value or []), idea.tags)
+        value = normalize_tags(list(value or []), [*idea.tags, *(known_tags or [])])
     elif field.key == "related":
         value = list(value or [])
     elif field.key == "title":
@@ -242,9 +249,12 @@ def parse_changes(tokens: list[str]) -> list[Change]:
     return changes
 
 
-def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str]:
+def apply_changes(
+    idea: Idea, schema: Schema, changes: list[Change], known_tags: list[str] | None = None
+) -> list[str]:
     """Validate every change, then apply them; returns a short description of each change.
 
+    New tags take the spelling of a tag in `known_tags` (the tags in use) when there is one.
     Raises ValueError listing every problem, without changing the idea.
     """
     problems: list[str] = []
@@ -294,7 +304,7 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
         field = grouped[key][0]
         if get(idea, field) == value or (value is None and not is_filled(idea, field)):
             continue
-        put(idea, field, value, schema.section_order)
+        put(idea, field, value, schema.section_order, known_tags)
         done.append(f"{key}: {display(field, value)}" if value is not None else f"{key}: cleared")
     for key, items in dated.items():
         field = grouped[key][0]
@@ -302,9 +312,11 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
             add_dated_item(idea, field.label, field.matches_heading, item, schema.section_order)
         if items:
             done.append(f"{key}: added {len(items)} item{'' if len(items) == 1 else 's'}")
+    spelling = {t.casefold(): t for t in reversed(known_tags or [])}
     for change in changes:
         tag = " ".join(change.value.split())
         wanted = tag.casefold()
+        tag = spelling.get(wanted, tag)
         present = [t.casefold() for t in idea.tags]
         if change.op == "add_tag" and wanted not in present:
             idea.tags.append(tag)

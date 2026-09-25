@@ -137,7 +137,7 @@ def _store(s: Session, idea: Idea, f: Field, value: fields.Value) -> bool:
     else:
         if isinstance(value, str) and fields.demote_headings(value)[1]:
             s.prompter.message("Note: ## headings inside a field were changed to ###.")
-        fields.put(idea, f, value, s.schema.section_order)
+        fields.put(idea, f, value, s.schema.section_order, s.known_tags)
     idea.touch()
     s.save(idea)
     return True
