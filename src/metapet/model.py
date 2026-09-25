@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import frontmatter
+import yaml
 
 
 class Status(StrEnum):
@@ -158,7 +159,9 @@ class Idea:
             meta[key] = value
         meta.update(self.extra)
         post = frontmatter.Post(self.body.strip() + "\n", **meta)
-        return frontmatter.dumps(post, sort_keys=False) + "\n"
+        # The pure-Python dumper: libyaml's writes emoji and other characters outside the
+        # Basic Multilingual Plane as \U escapes, and idea files are read and edited by hand.
+        return frontmatter.dumps(post, sort_keys=False, Dumper=yaml.SafeDumper) + "\n"
 
     @classmethod
     def from_markdown(cls, text: str, path: Path | None = None) -> Idea:

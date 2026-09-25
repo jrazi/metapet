@@ -182,3 +182,10 @@ def test_invalid_file_lists_every_problem():
         "effort: 'huge' must be S, M, L or XL",
     ]
     assert str(exc.value) == "; ".join(exc.value.problems)
+
+
+def test_emoji_in_titles_are_written_as_typed(store):
+    idea = store.create("Emoji 🚀 launcher")
+    text = (store.home.ideas / f"{idea.id}.md").read_text(encoding="utf-8")
+    assert "title: Emoji 🚀 launcher" in text and "\\U" not in text
+    assert store.find(idea.id).title == "Emoji 🚀 launcher"
