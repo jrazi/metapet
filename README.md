@@ -23,102 +23,87 @@ called `pet`. To try it without installing, run `uvx --from metapet pet`.
 
 ## Usage
 
-Run `pet init` once to create the folder where ideas are kept.
-
-### Adding ideas
+Run `pet init` once to create the data folder. Then add an idea:
 
 ```console
-$ pet add "Music library tagger" -t music -t cli \
-    -m "Tag and rename a messy music folder, using audio fingerprints to identify each track."
-+ music-library-tagger  Music library tagger
+$ pet add "Concert alerts" -t music
++ concert-alerts  Concert alerts
 ```
 
-`pet new` does the same, but asks for each field instead.
+`pet new` asks for the name, a short description, tags and a rating instead.
 
 ### Stages
 
-`pet promote` moves an idea to the next stage and asks that stage's questions.
-Enter skips a question.
+`pet promote` moves an idea to its next stage and asks that stage's questions. Enter
+skips a question.
 
 ```console
-$ pet promote music
-? What problem does it solve? Half my music has no tags and junk file names
-? Who is it for? Me
-? How could it work, roughly? Fingerprint each file with AcoustID, look it up on MusicBrainz, show the changes before applying them
+$ pet promote concert
+? What problem does it solve? I find out about shows after they sell out
+? Who is it for?
+? How could it work, roughly? Check my most played artists against a concert listings site every week
 ? What is it worth if it exists?
 ? Why is now a good time for it?
-music-library-tagger: seed → sketch
+concert-alerts: seed → sketch
 ```
 
-Any part of an id that matches only one idea works, so `music` is enough. The answers
-are saved as sections of the idea's file, and `pet refine music` lets you change them.
-`pet stages` lists the fields of each stage.
+Any part of an id that matches only one idea works, so `concert` is enough.
+`pet refine concert` changes the answers later.
 
 ### Notes and ratings
 
 ```sh
-pet note music "beets can do this, but its import step is a lot for one folder"
-pet set music excitement=5 impact=3 effort=M
+pet note concert "Songkick and Bandsintown both list concerts"
+pet set concert excitement=5 effort=M
 ```
 
 ### Listing ideas
 
 ```console
 $ pet ls
-id                         title                    status  exc  tags        imp  effort
-train-ticket-price-alerts  Train ticket price ale…  seed      4  telegram      3  S
-music-library-tagger       Music library tagger     sketch    5  music, cli    3  M
-home-lab-status-page       Home lab status page     seed      3  selfhosted       M
-board-game-score-keeper    Board game score keeper  seed      2  mobile
+id                    title                 status  exc  tags     imp  effort
+shared-shopping-list  Shared shopping list  seed      4  mobile     4  M
+recipe-box            Recipe box            seed      3  cooking       M
+reading-tracker       Reading tracker       seed      2  books         M
+concert-alerts        Concert alerts        sketch    5  music         M
 
 $ pet next
-id                         title             status  score  exc  tags        imp  effort
-train-ticket-price-alerts  Train ticket pr…  seed     7.00    4  telegram      3  S
-music-library-tagger       Music library t…  sketch   4.25    5  music, cli    3  M
-home-lab-status-page       Home lab status…  seed     3.00    3  selfhosted       M
+id                    title             status  score  exc  tags     imp  effort
+concert-alerts        Concert alerts    sketch   4.25    5  music         M
+shared-shopping-list  Shared shopping…  seed     4.00    4  mobile     4  M
+recipe-box            Recipe box        seed     3.00    3  cooking       M
 ```
 
-`pet next` ranks ideas by excitement plus impact, divided by effort. `pet show music`
-prints one idea, `pet search fingerprint` finds ideas by any word in them, and
-`pet review` goes through the ideas you haven't looked at in two weeks.
-
-Run `pet` on its own to open the full-screen view shown above. See `pet --help` for
-all commands.
+`pet next` ranks ideas by excitement plus impact, divided by effort. `pet show`,
+`pet search` and `pet review` cover the rest, and `pet` on its own opens the
+full-screen view shown above. See `pet --help` for all commands.
 
 ## Idea files
 
-Each idea is a plain Markdown file, so you can also open it in any editor or with
-`pet edit music`. This is the file from the example above, without its two empty
-sections:
+Each idea is a Markdown file that you can also edit by hand, or with `pet edit`.
+This is `concert-alerts.md` from the example above, without its empty sections:
 
 ```markdown
 ---
-id: music-library-tagger
-title: Music library tagger
+id: concert-alerts
+title: Concert alerts
 status: sketch
 created: 2026-09-25
 updated: 2026-09-25
 tags:
 - music
-- cli
 excitement: 5
-impact: 3
 effort: M
 ---
 
-Tag and rename a messy music folder, using audio fingerprints to identify each track.
-
 ## Problem
-Half my music has no tags and junk file names
-
-## Who it's for
-Me
+I find out about shows after they sell out
 
 ## Rough solution
-Fingerprint each file with AcoustID, look it up on MusicBrainz, show the changes before applying them
+Check my most played artists against a concert listings site every week
 
 ## Notes
-- 2026-09-25: beets can do this, but its import step is a lot for one folder
+- 2026-09-25: Songkick and Bandsintown both list concerts
 ```
 
 ## Configuration
