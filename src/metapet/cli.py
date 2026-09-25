@@ -11,30 +11,37 @@ import click
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from metapet import export, paths, scoring, stages, sync
+from metapet import export, paths, schema, scoring, stages, sync
 from metapet.model import Effort, Idea, Status
+from metapet.schema import Schema, SchemaError
 from metapet.store import IdeaLookupError, Store
 
 
 def _lifecycle_help() -> str:
-    described = stages.describe()
+    built_in = schema.builtin()
+
+    def keys(stage_fields) -> str:
+        return ", ".join(f"{f.key}*" if f.required else f.key for f in stage_fields)
+
+    described = stages.describe(built_in)
     name_w = max(len(status.value) for status, _, _ in described)
     meaning_w = max(len(meaning) for _, meaning, _ in described)
-    rows = []
-    for status, meaning, sections in described:
-        adds = f"adds: {', '.join(sections)}" if sections else ""
-        rows.append(f"  {status.value:<{name_w}}  {meaning:<{meaning_w}}  {adds}".rstrip())
+    rows = [
+        f"  {status.value:<{name_w}}  {meaning:<{meaning_w}}  {keys(stage_fields)}".rstrip()
+        for status, meaning, stage_fields in described
+    ]
+    rows.append(f"  {'any stage':<{name_w + 2 + meaning_w}}  {keys(built_in.any_fields())}")
     return (
         "[bold]Lifecycle:[/] seed → sketch → spec → building → shipped, or shelved at any point.\n"
         + "\n".join(rows)
         + "\n\n"
-        "[bold]Structure is loose:[/] only the frontmatter is validated (pet check). The sections "
-        "promote adds are prompts, not rules: fill them, delete them, or add your own; promote "
-        "never overwrites what you wrote. Replace a stage's sections with "
-        "<data home>/templates/<sketch|spec|building|retro>.md."
+        "Fields marked * are expected before moving on; promote only warns when they are empty, "
+        "and any question can be skipped. Change the stages in <data home>/stages.toml (see the "
+        "README): a stage defined there replaces the built-in stage of the same name."
     )
 
 
@@ -100,6 +107,13 @@ def _find(store: Store, query: str) -> Idea:
         _fail(str(exc))
 
 
+def _schema(ctx: typer.Context) -> Schema:
+    try:
+        return schema.load(ctx.obj)
+    except SchemaError as exc:
+        _fail(escape(str(exc)))
+
+
 def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     """Shell completion for idea ids; completion must never fail loudly."""
     try:
@@ -111,6 +125,10 @@ def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     matches = [i for i in ideas if i.id.startswith(incomplete.lower())]
     return [(idea.id, idea.title) for idea in sorted(matches, key=lambda i: i.id)]
 
+
+NoInput = Annotated[
+    bool, typer.Option("--no-input", help="Never ask questions; use only the values given.")
+]
 
 IdArg = Annotated[
     str,
@@ -339,7 +357,8 @@ def edit(ctx: typer.Context, idea_id: IdArg) -> None:
     help="Move an idea to its next stage, adding that stage's sections.\n\n"
     "Moves one stage forward by default. --to can skip stages (each skipped stage still adds "
     "its sections) or move back (adds and removes nothing). A shelved idea returns with "
-    "--to STAGE.\n\n" + LIFECYCLE_HELP
+    "--to STAGE. If expected fields of earlier stages are empty, promote warns and moves "
+    "the idea anyway.\n\n" + LIFECYCLE_HELP
 )
 def promote(
     ctx: typer.Context,
@@ -347,8 +366,10 @@ def promote(
     to: Annotated[
         Status | None, typer.Option("--to", help="Target status (default: the next one).")
     ] = None,
+    no_input: NoInput = False,
 ) -> None:
     store = _store(ctx)
+    idea_schema = _schema(ctx)
     idea = _find(store, idea_id)
     target = to or idea.status.next()
     if target is None:
@@ -356,13 +377,20 @@ def promote(
     if target == Status.SHELVED:
         _fail("use `pet shelve ID REASON` to shelve an idea.")
     old = idea.status
-    stages.move(idea, target, ctx.obj)
-    if old == Status.SHELVED:
-        idea.shelved_reason = None
+    forward = bool(stages.statuses_between(old, target))
+    gaps = stages.gaps(idea, idea_schema, stages.before(target)) if forward else []
+    stages.promote(idea, target, idea_schema)
     store.save(idea)
     console.print(
         f"{idea.id}: {_status(old)} → {_status(target)}  [dim]{idea.path}[/]", soft_wrap=True
     )
+    if gaps:
+        labels = escape(", ".join(f.label for f in gaps))
+        err.print(
+            f"[yellow]warning:[/] still empty: {labels} (fill them with "
+            f"pet set {idea.id} KEY=VALUE or pet edit {idea.id} --field KEY)",
+            soft_wrap=True,
+        )
 
 
 @app.command()
@@ -378,7 +406,7 @@ def shelve(
     """
     store = _store(ctx)
     idea = _find(store, idea_id)
-    stages.move(idea, Status.SHELVED, ctx.obj)
+    stages.move(idea, Status.SHELVED, _schema(ctx))
     idea.shelved_reason = reason
     store.save(idea)
     console.print(f"{idea.id}: {_status(Status.SHELVED)}  [dim]{reason}[/]")
@@ -453,15 +481,35 @@ def stats(ctx: typer.Context) -> None:
 
 @app.command()
 def check(ctx: typer.Context) -> None:
-    """Validate every idea file and report broken ones."""
+    """Validate every idea file and stages.toml, and list empty expected fields."""
     store = _store(ctx)
     ideas, broken = store.scan()
     mismatched = [i for i in ideas if i.path and i.path.stem != i.id]
     for bad in broken:
-        err.print(f"[red]✗[/] {bad.path.name}: {bad.error}")
+        err.print(f"[red]✗[/] {bad.path.name}: {escape(bad.error)}")
     for idea in mismatched:
         err.print(f"[yellow]![/] {idea.path.name}: id is '{idea.id}' (rename the file to match)")
-    if broken:
+    try:
+        idea_schema = schema.load(store.home)
+    except SchemaError as exc:
+        idea_schema = None
+        err.print(f"[red]✗[/] stages.toml: {escape(str(exc))}", soft_wrap=True)
+    if store.home.templates.is_dir():
+        err.print(
+            "[yellow]![/] templates/ is no longer used; stage fields now come from "
+            "stages.toml (see README)"
+        )
+    if idea_schema is not None:
+        for idea in ideas:
+            if idea.status.terminal:
+                continue
+            gaps = stages.gaps(idea, idea_schema, idea.status)
+            if gaps:
+                labels = escape(", ".join(f.label for f in gaps))
+                console.print(
+                    f"[dim]i {idea.id} ({idea.status.value}): empty: {labels}[/]", soft_wrap=True
+                )
+    if broken or idea_schema is None:
         raise typer.Exit(1)
     console.print(f"[green]✓[/] {len(ideas)} ideas OK")
 

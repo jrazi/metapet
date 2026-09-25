@@ -109,5 +109,43 @@ def test_help_explains_the_lifecycle(home):
     for args in (["--help"], ["promote", "--help"]):
         output = runner.invoke(app, args, env={"COLUMNS": "200"}).output
         assert "seed → sketch → spec → building → shipped" in output
-        assert "adds: Problem, Rough solution" in output
-        assert "Structure is loose" in output
+        assert "problem*, audience, solution*, value, why_now" in output
+        assert "notes, links, related" in output
+        assert "promote only warns" in output
+        assert "stages.toml" in output
+
+
+def idea_text(home, idea_id):
+    return (home.ideas / f"{idea_id}.md").read_text(encoding="utf-8")
+
+
+def test_promote_warns_about_empty_expected_fields(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    assert "warning" not in pet(home, "promote", "budget").output
+    result = pet(home, "promote", "budget", "--no-input")
+    assert result.exit_code == 0
+    assert "sketch → spec" in result.output
+    assert "warning: still empty: Problem, Rough solution" in result.output
+    assert "status: spec" in idea_text(home, "budget-tracker")
+
+
+def test_check_lists_readiness_and_warns(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    home.templates.mkdir()
+    result = pet(home, "check")
+    assert result.exit_code == 0, result.output
+    assert "i budget-tracker (sketch): empty: Problem, Rough solution" in result.output
+    assert "templates/ is no longer used" in result.output
+    assert "1 ideas OK" in result.output
+
+
+def test_check_fails_on_bad_stages_file(home):
+    pet(home, "init")
+    home.stages_file.write_text("[nope]\n", encoding="utf-8")
+    result = pet(home, "check")
+    assert result.exit_code == 1
+    assert "stages.toml:" in result.output and "unknown stage 'nope'" in result.output
+    assert pet(home, "promote", "x").exit_code == 1
