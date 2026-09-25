@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from metapet import cli
 from metapet.cli import app
+from metapet.prompter import ScriptedPrompter
 
 runner = CliRunner()
 
@@ -250,3 +251,83 @@ def test_check_fails_on_bad_stages_file(home):
     assert result.exit_code == 1
     assert "stages.toml:" in result.output and "unknown stage 'nope'" in result.output
     assert pet(home, "promote", "x").exit_code == 1
+
+
+def interactive(monkeypatch, answers):
+    """Make the CLI think it runs in a terminal, answering from a script."""
+    prompter = ScriptedPrompter(answers)
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: not no_input)
+    monkeypatch.setattr(cli, "_prompter", lambda: prompter)
+    return prompter
+
+
+def test_new_asks_questions_in_a_terminal(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Old idea", "-t", "money")
+    prompter = interactive(monkeypatch, ["", "Budget tracker", "Track spending.", 4, False])
+    result = pet(home, "new", "-t", "money")
+    assert result.exit_code == 0, result.output
+    assert "budget-tracker" in result.output
+    assert prompter.messages[0] == "A title is needed."
+    methods = [method for method, _, _ in prompter.calls]
+    assert methods == ["text", "text", "text", "scale", "confirm"]  # tags were given
+    text = idea_text(home, "budget-tracker")
+    assert "excitement: 4" in text and "Track spending." in text and "- money" in text
+
+
+def test_new_with_no_input_asks_nothing(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, [])
+    assert pet(home, "new", "Thing", "--no-input").exit_code == 0
+    assert pet(home, "new", "--no-input").exit_code == 1
+
+
+def test_ctrl_c_keeps_answers_and_exits_130(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, ["Track spending.", KeyboardInterrupt()])
+    result = pet(home, "new", "Budget tracker")
+    assert result.exit_code == 130
+    assert "Stopped. Answers so far are saved." in result.output
+    assert "Track spending." in idea_text(home, "budget-tracker")
+
+
+def test_ctrl_c_before_the_title_creates_nothing(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, [KeyboardInterrupt()])
+    assert pet(home, "new").exit_code == 130
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_refine_in_a_terminal(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    interactive(monkeypatch, ["Track spending."])
+    result = pet(home, "refine", "budget", "summary")
+    assert result.exit_code == 0, result.output
+    assert "Track spending." in idea_text(home, "budget-tracker")
+
+    result = pet(home, "refine", "budget", "mvp")
+    assert result.exit_code == 1
+    assert "'mvp' belongs to the spec stage" in result.output
+
+
+def test_promote_in_a_terminal_can_be_cancelled(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    interactive(monkeypatch, ["cancel"])
+    result = pet(home, "promote", "budget")
+    assert result.exit_code == 0 and "Not promoted." in result.output
+    assert "status: sketch" in idea_text(home, "budget-tracker")
+
+
+def test_without_a_terminal_nothing_is_asked(home, monkeypatch):
+    monkeypatch.setattr(cli, "_prompter", lambda: ScriptedPrompter([]))
+    pet(home, "init")
+    result = pet(home, "add", "Budget tracker", "-i")
+    assert result.exit_code == 0
+    assert "note: not a terminal, skipping questions" in result.output
+    assert pet(home, "promote", "budget").exit_code == 0
+    result = pet(home, "refine", "budget")
+    assert result.exit_code == 1
+    assert "refine needs a terminal" in result.output
