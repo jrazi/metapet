@@ -174,3 +174,26 @@ def test_ctrl_c_stops_like_quit(store):
     assert (result.handled, result.remaining, result.stopped) == (1, 1, True)
     assert "Keep this" in on_disk(store, first).body
     assert on_disk(store, second).reviewed is None
+
+
+def test_changes_made_during_the_review_are_kept(store):
+    first = old_idea(store, "First idea")
+    second = old_idea(store, "Second idea")
+    path = store.home.ideas / f"{second.id}.md"
+    path.write_text(path.read_text(encoding="utf-8") + "\nAdded by hand.\n", encoding="utf-8")
+    s, _ = session(store, ["skip", "skip"])
+    result = review.run(s, [first, second])
+    assert result.handled == 2
+    saved = on_disk(store, second)
+    assert "Added by hand." in saved.body and saved.reviewed == TODAY
+
+
+def test_ideas_whose_file_is_gone_are_skipped(store):
+    first = old_idea(store, "First idea")
+    second = old_idea(store, "Second idea")
+    (store.home.ideas / f"{first.id}.md").unlink()
+    s, p = session(store, ["skip"])
+    result = review.run(s, [first, second])
+    assert (result.handled, result.remaining) == (1, 0)
+    assert not (store.home.ideas / f"{first.id}.md").exists()
+    assert any("cannot be read" in message for message in p.messages)

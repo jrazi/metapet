@@ -9,7 +9,7 @@ import datetime as dt
 from dataclasses import dataclass
 
 from metapet import fields, stages, wizard
-from metapet.model import Idea, Status
+from metapet.model import Idea, IdeaError, Status
 from metapet.schema import Field, Kind, Storage
 
 # Used when a custom stages.toml has no excitement field.
@@ -104,18 +104,34 @@ def _review_one(s: wizard.Session, idea: Idea) -> bool:
             return True
 
 
+def _reload(idea: Idea) -> Idea | None:
+    """The idea as it is on disk now, so changes made during the review are not overwritten."""
+    if idea.path is None:
+        return idea
+    try:
+        return Idea.load(idea.path)
+    except (OSError, IdeaError):
+        return None
+
+
 def run(s: wizard.Session, ideas: list[Idea], today: dt.date | None = None) -> ReviewResult:
     """Go through the ideas one by one. Answers are saved as they are given."""
     if today is not None:
         s.today = today
     total = len(ideas)
     s.prompter.message(f"{total} idea{'' if total == 1 else 's'} to review.")
-    handled = 0
+    handled = done = 0
     try:
         for idea in ideas:
-            if not _review_one(s, idea):
+            fresh = _reload(idea)
+            if fresh is None:
+                s.prompter.message(f"{idea.id}: skipped, its file is gone or cannot be read.")
+                done += 1
+                continue
+            if not _review_one(s, fresh):
                 break
             handled += 1
+            done += 1
     except KeyboardInterrupt:
-        return ReviewResult(handled, total - handled, stopped=True)
-    return ReviewResult(handled, total - handled)
+        return ReviewResult(handled, total - done, stopped=True)
+    return ReviewResult(handled, total - done)
