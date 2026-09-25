@@ -11,7 +11,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from metapet import paths
+from metapet import paths, stages
 from metapet.model import Effort, Idea, Status
 from metapet.store import IdeaLookupError, Store
 
@@ -259,3 +259,45 @@ def edit(ctx: typer.Context, idea_id: Annotated[str, typer.Argument(metavar="ID"
     """Open an idea in $EDITOR."""
     idea = _find(_store(ctx), idea_id)
     click.edit(filename=str(idea.path))
+
+
+# -- lifecycle ---------------------------------------------------------------
+
+
+@app.command()
+def promote(
+    ctx: typer.Context,
+    idea_id: Annotated[str, typer.Argument(metavar="ID")],
+    to: Annotated[
+        Status | None, typer.Option("--to", help="Target status (default: the next one).")
+    ] = None,
+) -> None:
+    """Move an idea to its next stage, adding that stage's sections."""
+    store = _store(ctx)
+    idea = _find(store, idea_id)
+    target = to or idea.status.next()
+    if target is None:
+        _fail(f"{idea.id} is {idea.status.value}; pass --to to move it elsewhere.")
+    if target == Status.SHELVED:
+        _fail("use `pet shelve ID REASON` to shelve an idea.")
+    old = idea.status
+    stages.move(idea, target, ctx.obj)
+    if old == Status.SHELVED:
+        idea.shelved_reason = None
+    store.save(idea)
+    console.print(f"{idea.id}: {_status(old)} → {_status(target)}  [dim]{idea.path}[/]")
+
+
+@app.command()
+def shelve(
+    ctx: typer.Context,
+    idea_id: Annotated[str, typer.Argument(metavar="ID")],
+    reason: Annotated[str, typer.Argument(help="Why you're putting it aside.")],
+) -> None:
+    """Shelve an idea, keeping the reason for future you."""
+    store = _store(ctx)
+    idea = _find(store, idea_id)
+    stages.move(idea, Status.SHELVED, ctx.obj)
+    idea.shelved_reason = reason
+    store.save(idea)
+    console.print(f"{idea.id}: {_status(Status.SHELVED)}  [dim]{reason}[/]")
