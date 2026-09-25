@@ -102,9 +102,7 @@ class _IdText(_Text):
     which would drop matches on a fragment of the id or title.
     """
 
-    def shell_complete(
-        self, ctx: typer.Context, param: TyperArgument, incomplete: str
-    ) -> list:
+    def shell_complete(self, ctx: typer.Context, param: TyperArgument, incomplete: str) -> list:
         return [
             _click_completion.CompletionItem(idea_id, help=help_)
             for idea_id, help_ in _complete_ids(ctx, incomplete)
@@ -117,7 +115,10 @@ class _Command(TyperCommand):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         for param in self.params:
-            if isinstance(param, TyperArgument) and type(param.type) is _click_types.StringParamType:
+            if (
+                isinstance(param, TyperArgument)
+                and type(param.type) is _click_types.StringParamType
+            ):
                 param.type = _Text()
 
     def collect_usage_pieces(self, ctx: typer.Context) -> list[str]:
@@ -873,7 +874,7 @@ def _edit_file(path: Path) -> None:
                 if click.confirm("Open it again to fix it?", default=True):
                     continue
                 err.print(hint, soft_wrap=True)
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
             _fail(f"{problem}\n{hint}")
         if idea.id != path.stem:
             err.print(
