@@ -768,7 +768,8 @@ def _edit_file(path: Path) -> None:
     "Each CHANGE is key=value, +tag or -tag, for example: pet set ID excitement=4 effort=S +cli "
     "-old. Keys are the field keys shown by pet stages. An empty value clears a field "
     "(summary=). tags=a,b replaces all tags. For a list field, repeat the key, one item "
-    "each: features=search features=export. If a -tag is taken as an option, put -- before "
+    "each: features=search features=export. For a dated list (notes, log), each value is "
+    "added as a new dated item and the old items are kept; notes= clears the list. If a -tag is taken as an option, put -- before "
     "the changes.",
 )
 def set_(

@@ -155,7 +155,7 @@ shows the stages and field keys in use, and `pet check` reports mistakes in your
 | `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved); also `pet list` |
 | `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment |
 | `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
-| `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields; an empty value clears one |
+| `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields; an empty value clears one. For `notes` and `log`, each value adds a dated item |
 | `pet note ID TEXT` | Add a dated line to the Notes section |
 | `pet rm ID [--yes]` | Delete an idea (asks first; outside a terminal pass `--yes`); also `pet delete` |
 | `pet rename ID [NEW_ID]` | Change an idea's id and file name; without `NEW_ID`, make it from the title |

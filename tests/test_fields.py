@@ -181,3 +181,24 @@ def test_set_title_collapses_whitespace():
     idea = Idea(id="x", title="X")
     apply(idea, "title=a   b")
     assert idea.title == "a b"
+
+
+def test_set_appends_to_dated_list():
+    idea = Idea(id="x", title="X")
+    fields.add_note(idea, S, "one", today=dt.date(2026, 1, 2))
+    done = apply(idea, "notes=two", "notes=three", "log=started")
+    today = dt.date.today().isoformat()
+    assert fields.get(idea, field("notes")) == [
+        "2026-01-02: one",
+        f"{today}: two",
+        f"{today}: three",
+    ]
+    assert fields.get(idea, field("log")) == [f"{today}: started"]
+    assert done == ["notes: added 2 items", "log: added 1 item"]
+
+
+def test_set_empty_clears_dated_list():
+    idea = Idea(id="x", title="X")
+    fields.add_note(idea, S, "one")
+    assert apply(idea, "notes=") == ["notes: cleared"]
+    assert fields.get(idea, field("notes")) == []

@@ -112,11 +112,28 @@ def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:
     setattr(idea, field.key, value)
 
 
-def add_note(idea: Idea, schema: Schema, text: str, today: dt.date | None = None) -> None:
-    """Append a dated item to the Notes section, creating the section if needed."""
+def add_dated_item(
+    idea: Idea,
+    heading: str,
+    match: Callable[[str], bool],
+    text: str,
+    order: Order,
+    today: dt.date | None = None,
+) -> None:
+    """Append `YYYY-MM-DD: text` to a list section, creating the section if needed."""
     text = " ".join(text.split())
     if not text:
         raise ValueError("the note is empty")
+    body = sections.parse(idea.body)
+    existing = sections.find(body, match)
+    item = f"{(today or dt.date.today()).isoformat()}: {text}"
+    content = sections.append_item(existing.content if existing else "", item)
+    sections.upsert(body, heading, content, match, order)
+    idea.body = sections.render(body)
+
+
+def add_note(idea: Idea, schema: Schema, text: str, today: dt.date | None = None) -> None:
+    """Append a dated item to the Notes section, creating the section if needed."""
     try:
         field = schema.field("notes", labels=False)
     except KeyError:
@@ -125,12 +142,7 @@ def add_note(idea: Idea, schema: Schema, text: str, today: dt.date | None = None
         heading, match = field.label, field.matches_heading
     else:
         heading, match = "Notes", lambda h: h.strip().casefold() == "notes"
-    body = sections.parse(idea.body)
-    existing = sections.find(body, match)
-    item = f"{(today or dt.date.today()).isoformat()}: {text}"
-    content = sections.append_item(existing.content if existing else "", item)
-    sections.upsert(body, heading, content, match, schema.section_order)
-    idea.body = sections.render(body)
+    add_dated_item(idea, heading, match, text, schema.section_order, today)
     idea.touch()
 
 
@@ -230,8 +242,15 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
         grouped.setdefault(field.key, (field, []))[1].append(change.value)
 
     planned: dict[str, Value] = {}
+    dated: dict[str, list[str]] = {}  # items to add to dated lists; [] clears the list
     for key, (field, values) in grouped.items():
         is_section_list = field.kind == Kind.LIST and field.storage == Storage.SECTION
+        if is_section_list and field.dated:
+            # Dated lists (notes, log) keep their history: each value adds an item.
+            dated[key] = [" ".join(v.split()) for v in values if v.strip()]
+            if any(not v.strip() for v in values):
+                planned[key] = None
+            continue
         try:
             value = parse(field, values if is_section_list else values[0])
         except ValueError as exc:
@@ -251,6 +270,12 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
             continue
         put(idea, field, value, schema.section_order)
         done.append(f"{key}: {display(field, value)}" if value is not None else f"{key}: cleared")
+    for key, items in dated.items():
+        field = grouped[key][0]
+        for item in items:
+            add_dated_item(idea, field.label, field.matches_heading, item, schema.section_order)
+        if items:
+            done.append(f"{key}: added {len(items)} item{'' if len(items) == 1 else 's'}")
     for change in changes:
         wanted = change.value.casefold()
         present = [t.casefold() for t in idea.tags]
