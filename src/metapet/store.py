@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
+import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
 
+from metapet import ids
 from metapet.model import Idea, IdeaError, clean_title
 from metapet.paths import DataHome
 
@@ -23,13 +23,6 @@ class IdeaLookupError(LookupError):
 class BrokenFile:
     path: Path
     error: str
-
-
-def slugify(text: str, max_len: int = 60) -> str:
-    normalized = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-z0-9]+", "-", normalized.lower()).strip("-")
-    slug = slug[:max_len].rstrip("-")
-    return slug or "idea"
 
 
 class Store:
@@ -90,12 +83,18 @@ class Store:
 
     # -- writing -------------------------------------------------------------
 
-    def unique_id(self, title: str) -> str:
-        base = slugify(title)
+    def exists(self, idea_id: str) -> bool:
+        return (self.home.ideas / f"{idea_id}.md").exists()
+
+    def unique(self, base: str) -> str:
+        """base, or base-2, base-3, ... when an idea already uses it."""
         candidate, n = base, 2
-        while (self.home.ideas / f"{candidate}.md").exists():
-            candidate, n = f"{base}-{n}", n + 1
+        while self.exists(candidate):
+            candidate, n = ids.with_suffix(base, n), n + 1
         return candidate
+
+    def unique_id(self, title: str, today: dt.date | None = None) -> str:
+        return self.unique(ids.suggest(title, today).id)
 
     def create(self, title: str, **fields) -> Idea:
         self.require()

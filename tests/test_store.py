@@ -3,18 +3,19 @@ import datetime as dt
 import pytest
 
 from metapet.model import Effort, Idea, IdeaError, Status
-from metapet.store import IdeaLookupError, slugify
-
-
-def test_slugify():
-    assert slugify("Spotify downloader bot for Telegram!") == "spotify-downloader-bot-for-telegram"
-    assert slugify("Café ☕ app") == "cafe-app"
-    assert slugify("!!!") == "idea"
+from metapet.store import IdeaLookupError
 
 
 def test_slug_collisions_get_suffixes(store):
     ids = [store.create("Same idea").id for _ in range(3)]
     assert ids == ["same-idea", "same-idea-2", "same-idea-3"]
+
+
+def test_suffixed_ids_stay_within_the_limit(store):
+    first = store.create("x" * 50)
+    second = store.create("x" * 50)
+    assert first.id == "x" * 40
+    assert second.id == "x" * 38 + "-2"
 
 
 def test_round_trip_preserves_fields_and_unknown_keys(store):
