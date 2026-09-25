@@ -849,3 +849,31 @@ def test_edit_field_twice_does_not_duplicate_heading(home, monkeypatch):
     pet(home, "edit", "chess", "--field", "problem")
     text = idea_text(home, "chess")
     assert "\n## Stretch" not in text and text.count("### Stretch") == 1
+
+
+def test_search_words_and_ids(home):
+    pet(home, "init")
+    pet(home, "add", "Music tagger", "-t", "music", "-t", "cli")
+    pet(home, "add", "D-d thing", "--id", "d-d")
+    pet(home, "promote", "d-d")
+    assert "d-d" in pet(home, "search", "d-d").output
+    assert "music-tagger" in pet(home, "search", "music", "cli").output
+    assert "music-tagger" in pet(home, "search", "music-tag").output
+    result = pet(home, "search", "what problem")
+    assert "No ideas match 'what problem'." in result.output
+
+
+def test_search_hides_shelved_unless_all(home):
+    pet(home, "init")
+    pet(home, "add", "Music tagger")
+    pet(home, "shelve", "music", "later")
+    output = pet(home, "search", "music").output
+    assert "No ideas match 'music'. (shipped and shelved ideas are hidden; add -a)" in output
+    assert "music-tagger" in pet(home, "search", "music", "-a").output
+    assert "music-tagger" in pet(home, "search", "music", "status:shelved").output
+
+
+def test_search_empty_is_error(home):
+    pet(home, "init")
+    result = pet(home, "search", "")
+    assert result.exit_code == 1 and "give words to search for" in result.output

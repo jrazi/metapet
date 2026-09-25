@@ -1051,21 +1051,35 @@ def _run_ui(ctx: typer.Context) -> None:
 
 
 @app.command()
-def search(ctx: typer.Context, text: Annotated[str, typer.Argument()]) -> None:
-    """Find ideas whose title, tags or body mention TEXT."""
-    needle = text.lower()
+def search(
+    ctx: typer.Context,
+    query: Annotated[
+        list[str],
+        typer.Argument(
+            metavar="QUERY...",
+            help="Words that must all appear (in the id, title, tags or text); also "
+            "status:NAME and tag:NAME.",
+            show_default=False,
+        ),
+    ],
+    all_: Annotated[
+        bool, typer.Option("--all", "-a", help="Include shipped and shelved ideas.")
+    ] = False,
+) -> None:
+    """Find ideas by words, status:NAME and tag:NAME, like the filter in pet ui."""
+    text = " ".join(query).strip()
+    if not text:
+        _fail("give words to search for")
     ideas, broken = _store(ctx).scan()
-    hits = [
-        idea
-        for idea in ideas
-        if needle in idea.title.lower()
-        or needle in idea.body.lower()
-        or any(needle in t.lower() for t in idea.tags)
-    ]
-    if not hits:
-        console.print(f"[dim]Nothing mentions '{escape(text)}'.[/]")
-    else:
+    hits = views.filter_ideas(ideas, text, everything=all_)
+    if hits:
         _print_ideas(hits)
+    else:
+        message = f"No ideas match '{escape(text)}'."
+        asked_status = any(t.lower().startswith("status:") for t in text.split())
+        if not all_ and not asked_status and views.filter_ideas(ideas, text, everything=True):
+            message += " (shipped and shelved ideas are hidden; add -a)"
+        console.print(f"[dim]{message}[/]")
     _warn_broken(broken)
 
 

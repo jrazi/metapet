@@ -72,3 +72,9 @@ def test_filter_ideas():
     assert ids("tag:cli tag:fun") == ["bot", "game"]
     assert ids("status:shelved") == ["old"]
     assert ids("status:seed status:shelved tag:cli") == ["bot", "old"]
+
+
+def test_filter_ignores_comments():
+    ideas = [Idea(id="x", title="X", body="## Problem\n<!-- What problem does it solve? -->\n")]
+    assert views.filter_ideas(ideas, "what problem") == []
+    assert views.filter_ideas(ideas, "problem") == ideas  # the heading is text

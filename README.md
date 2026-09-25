@@ -166,7 +166,7 @@ alias, or key with `_` read as a space). The old `templates/` folder is no longe
 | `pet shelve ID REASON` | Park an idea, remembering why |
 | `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
 | `pet ui` · `pet` | Browse and change ideas in a full-screen view (bare `pet` outside a terminal prints help) |
-| `pet search TEXT` | Search titles, tags and bodies; also `pet find` |
+| `pet search QUERY… [-a]` | Find ideas whose id, title, tags or text contain all the words; `status:NAME` and `tag:NAME` work as in the `pet ui` filter; `-a` includes shipped/shelved; also `pet find` |
 | `pet next [-n N]` | Suggest what to build next |
 | `pet random` | Resurface a forgotten seed or sketch |
 | `pet stats` | Counts by status, tag and month |

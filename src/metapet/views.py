@@ -75,11 +75,12 @@ def preview_markdown(idea: Idea, schema: Schema) -> str:
     return "\n\n".join(parts) + "\n"
 
 
-def filter_ideas(ideas: list[Idea], query: str) -> list[Idea]:
+def filter_ideas(ideas: list[Idea], query: str, *, everything: bool = False) -> list[Idea]:
     """Filter by words plus `status:NAME` and `tag:NAME` tokens.
 
-    Tokens of the same kind are alternatives; everything else must all match. Shipped and
-    shelved ideas are hidden unless a status: token asks for them.
+    Tokens of the same kind are alternatives; everything else must all match, in the id,
+    title, tags or text (comments left out). Shipped and shelved ideas are hidden unless a
+    status: token asks for them, or `everything` is True.
     """
     statuses: set[str] = set()
     tags: set[str] = set()
@@ -97,11 +98,12 @@ def filter_ideas(ideas: list[Idea], query: str) -> list[Idea]:
         if statuses:
             if idea.status.value not in statuses:
                 return False
-        elif idea.status.terminal:
+        elif idea.status.terminal and not everything:
             return False
         if tags and not tags & {t.casefold() for t in idea.tags}:
             return False
-        text = " ".join([idea.id, idea.title, *idea.tags, idea.body]).casefold()
+        body = sections.strip_comments(idea.body)
+        text = " ".join([idea.id, idea.title, *idea.tags, body]).casefold()
         return all(word in text for word in words)
 
     return [idea for idea in ideas if keep(idea)]
