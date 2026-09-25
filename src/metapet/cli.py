@@ -53,7 +53,8 @@ def _lifecycle_help() -> str:
         + "\n\n"
         "Fields marked * are expected before moving on; promote only warns when they are empty, "
         "and any question can be skipped. Change the stages in <data home>/stages.toml (see the "
-        "README): a stage defined there replaces the built-in stage of the same name."
+        "README): a stage defined there replaces the built-in stage of the same name. "
+        "pet stages shows the stages in use."
     )
 
 
@@ -515,7 +516,7 @@ def edit(
     context_settings={"ignore_unknown_options": True},
     help="Change fields without any questions.\n\n"
     "Each CHANGE is key=value, +tag or -tag, for example: pet set ID excitement=4 effort=S +cli "
-    "-old. Keys are the field keys listed in pet --help. An empty value clears a field "
+    "-old. Keys are the field keys shown by pet stages. An empty value clears a field "
     "(summary=). tags=a,b replaces all tags. For a list field, repeat the key, one item "
     "each: features=search features=export. If a -tag is taken as an option, put -- before "
     "the changes.",
@@ -785,6 +786,16 @@ def stats(ctx: typer.Context) -> None:
         table.add_row("tags", "  ".join(f"{t} {n}" for t, n in by_tag.most_common(10)))
     table.add_row("added", "  ".join(f"{m} {n}" for m, n in sorted(by_month.items())[-6:]))
     console.print(table)
+
+
+@app.command("stages")
+def stages_(ctx: typer.Context) -> None:
+    """Show the stages and their field keys, including changes from your stages.toml.
+
+    Fields marked * are expected before moving on. Use these keys with pet set and pet refine.
+    """
+    idea_schema = _schema(ctx)
+    console.print("\n".join(_stage_rows(idea_schema)), markup=False, highlight=False)
 
 
 @app.command()

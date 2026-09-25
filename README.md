@@ -129,8 +129,8 @@ question = "How should it feel to use?"
 ```
 
 See [`src/metapet/stages.toml`](src/metapet/stages.toml) for the built-in file and
-every option (`kind`, `store`, `hint`, `choices`, `aliases`, `dated`). `pet check`
-reports mistakes in your file. The old `templates/` folder is no longer used.
+every option (`kind`, `store`, `hint`, `choices`, `aliases`, `dated`). `pet stages`
+shows the stages and field keys in use, and `pet check` reports mistakes in your file. The old `templates/` folder is no longer used.
 
 ## Commands
 
@@ -153,6 +153,7 @@ reports mistakes in your file. The old `templates/` folder is no longer used.
 | `pet next [-n N]` | Suggest what to build next |
 | `pet random` | Resurface a forgotten seed or sketch |
 | `pet stats` | Counts by status, tag and month |
+| `pet stages` | Show the stages and their field keys, including your `stages.toml` |
 | `pet check` | Validate idea files and `stages.toml`; list empty expected fields |
 | `pet where` | Show the data directory in use |
 | `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |

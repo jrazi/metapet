@@ -250,6 +250,20 @@ def test_check_lists_readiness_and_warns(home):
     assert "1 ideas OK" in result.output
 
 
+def test_stages_shows_fields_from_the_stages_file(home):
+    pet(home, "init")
+    home.stages_file.write_text(
+        '[sketch]\n\n[[sketch.fields]]\nkey = "vibe"\nlabel = "Vibe"\n'
+        'question = "How should it feel?"\nrequired = true\n',
+        encoding="utf-8",
+    )
+    result = pet(home, "stages")
+    assert result.exit_code == 0, result.output
+    assert "thought through for a few minutes" in result.output
+    assert "vibe*" in result.output and "why_now" not in result.output
+    assert "features*, mvp*" in result.output
+
+
 def test_check_fails_on_bad_stages_file(home):
     pet(home, "init")
     home.stages_file.write_text("[nope]\n", encoding="utf-8")
