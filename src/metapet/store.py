@@ -80,6 +80,14 @@ class Store:
                 raise IdeaLookupError(f"'{query}' matches {len(matches)} ideas", matches)
         raise IdeaLookupError(f"no idea matches '{query}'")
 
+    def all_tags(self) -> list[str]:
+        """Every tag in use, once each (first spelling wins), sorted ignoring case."""
+        tags: dict[str, str] = {}
+        for idea in self.all():
+            for tag in idea.tags:
+                tags.setdefault(tag.casefold(), tag)
+        return sorted(tags.values(), key=str.casefold)
+
     # -- writing -------------------------------------------------------------
 
     def unique_id(self, title: str) -> str:

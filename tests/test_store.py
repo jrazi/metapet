@@ -105,3 +105,9 @@ def test_impact_out_of_range_is_rejected():
     text = "---\nid: x\ntitle: x\nstatus: seed\ncreated: 2026-01-01\nimpact: 9\n---\n"
     with pytest.raises(IdeaError, match="impact must be 1-5, got 9"):
         Idea.from_markdown(text)
+
+
+def test_all_tags(store):
+    store.create("One", tags=["cli", "Bot"])
+    store.create("Two", tags=["CLI", "art"])
+    assert store.all_tags() == ["art", "Bot", "cli"]
