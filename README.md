@@ -30,6 +30,8 @@ pet show plant                            # read it
 pet next                                  # suggest what to work on
 ```
 
+`pet ls` hides shipped and shelved ideas unless you pass `--all`.
+
 You do not have to type the whole id. Any unique part of the id or title works.
 Run `pet` on its own to open the full-screen view.
 
@@ -60,7 +62,9 @@ id: plant-watering-bot
 title: Plant watering bot
 status: sketch
 created: 2026-09-25
-tags: [hardware]
+updated: 2026-09-25
+tags:
+- hardware
 excitement: 4
 ---
 Water the plants when the soil is dry.
@@ -82,9 +86,10 @@ I forget to water them.
 | shipped | done and usable |
 | shelved | put aside on purpose, with a reason |
 
-Each stage asks a few questions, such as the problem or the MVP scope. `pet promote`
-asks them when an idea moves on, and `pet refine` asks them again. Any question can be
-skipped; empty fields only cause a warning. Run `pet stages` to see each stage's fields.
+Each stage asks a few questions, such as the problem or the first version's scope.
+`pet promote` asks them when an idea moves on, and `pet refine` asks them again.
+You can skip any question. If a field marked with * in `pet stages` is still empty,
+`pet promote` prints a warning but still moves the idea.
 
 ## Customizing stages
 
@@ -157,7 +162,7 @@ commands, options and idea ids.
 | `pet init` | Create the idea store |
 | `pet add` | Add an idea with just a title |
 | `pet new` | Add an idea and answer its first questions |
-| `pet ls` | List ideas (also `pet list`) |
+| `pet ls` | List ideas; add `--all` to include shipped and shelved (also `pet list`) |
 | `pet show` | Show one idea |
 | `pet edit` | Open an idea in `$EDITOR` |
 | `pet set` | Change fields, such as `excitement=4` or `+tag` |
@@ -177,7 +182,7 @@ commands, options and idea ids.
 | `pet check` | Check idea files and `stages.toml` |
 | `pet where` | Show the data directory in use |
 | `pet sync` | Back up with git |
-| `pet export` | Export ideas as Markdown or JSON |
+| `pet export` | Export ideas as a Markdown index, JSON, or both |
 
 Run `pet <command> --help` for options. When piped, list commands print
 tab-separated lines.
