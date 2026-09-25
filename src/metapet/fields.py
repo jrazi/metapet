@@ -256,7 +256,7 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
             problems.append(NOT_SETTABLE[key])
             continue
         try:
-            field = schema.field(key, labels=False)
+            field = schema.field(key)  # a key, or a label such as "MVP scope"
         except KeyError:
             known = ", ".join(f.key for f in schema.all_fields())
             problems.append(f"unknown field '{change.key}'; known fields: {known}")

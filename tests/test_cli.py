@@ -936,3 +936,11 @@ def test_check_lists_every_problem(home):
         "    effort: 'huge' must be S, M, L or XL",
     ):
         assert line in result.output.splitlines()
+
+
+def test_refine_has_no_no_input(home):
+    pet(home, "init")
+    pet(home, "add", "X")
+    result = pet(home, "refine", "x", "--no-input")
+    assert result.exit_code == 2
+    assert "No such option" in result.output

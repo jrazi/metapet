@@ -159,12 +159,12 @@ alias, or key with `_` read as a space). The old `templates/` folder is no longe
 | `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved); also `pet list` |
 | `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment |
 | `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
-| `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields; an empty value clears one. For `notes` and `log`, each value adds a dated item |
+| `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields (by key or heading); an empty value clears one. For `notes` and `log`, each value adds a dated item |
 | `pet note ID TEXT` | Add a dated line to the Notes section |
 | `pet rm ID [--yes]` | Delete an idea (asks first; outside a terminal pass `--yes`); also `pet delete` |
 | `pet rename ID [NEW_ID]` | Change an idea's id and file name; without `NEW_ID`, make it from the title |
 | `pet promote ID [--to STATUS] [-v] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
-| `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
+| `pet refine ID [FIELD]` | Answer one field again, or pick fields from a list |
 | `pet shelve ID REASON` | Park an idea, remembering why (the reason is also added to Notes with the date) |
 | `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
 | `pet ui` · `pet` | Browse and change ideas in a full-screen view (bare `pet` outside a terminal prints help) |

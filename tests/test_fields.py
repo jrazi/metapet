@@ -163,9 +163,13 @@ def test_apply_changes_reports_every_problem_and_changes_nothing():
     assert idea.to_markdown() == before
 
 
-def test_apply_changes_rejects_labels_as_keys():
-    with pytest.raises(ValueError, match="unknown field 'Rough solution'"):
-        apply(Idea(id="x", title="X"), "Rough solution=x")
+def test_set_accepts_label():
+    idea = Idea(id="x", title="X")
+    assert apply(idea, "MVP scope=Daily message", "rough solution=A bot") == [
+        "mvp: Daily message",
+        "solution: A bot",
+    ]
+    assert fields.get(idea, field("mvp")) == "Daily message"
 
 
 def test_add_note():

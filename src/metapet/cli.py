@@ -783,12 +783,13 @@ def _edit_file(path: Path) -> None:
     "set",
     context_settings={"ignore_unknown_options": True},
     help="Change fields without any questions.\n\n"
-    "Each CHANGE is key=value, +tag or -tag, for example: pet set ID excitement=4 effort=S +cli "
-    "-old. Keys are the field keys shown by pet stages. An empty value clears a field "
-    "(summary=). tags=a,b replaces all tags. For a list field, repeat the key, one item "
-    "each: features=search features=export. For a dated list (notes, log), each value is "
-    "added as a new dated item and the old items are kept; notes= clears the list. If a -tag is taken as an option, put -- before "
-    "the changes.",
+    "Each CHANGE is key=value, +tag or -tag, for example: pet set ID excitement=4 effort=S "
+    "+cli -old. Keys are the field keys shown by pet stages; a field's heading works too "
+    '("MVP scope=..."). An empty value clears a field (summary=). tags=a,b replaces all '
+    "tags. For a list field, repeat the key, one item each: features=search "
+    "features=export. For a dated list (notes, log), each value is added as a new dated "
+    "item and the old items are kept; notes= clears the list. If a -tag is taken as an "
+    "option, put -- before the changes.",
 )
 def set_(
     ctx: typer.Context,
@@ -949,7 +950,6 @@ def refine(
         str | None,
         typer.Argument(metavar="FIELD", help="Only this field (key or heading)."),
     ] = None,
-    no_input: NoInput = False,
 ) -> None:
     """Answer an idea's questions again, or fill the ones you skipped.
 
@@ -968,7 +968,7 @@ def refine(
                 f"'{field.key}' belongs to the {field.stage} stage; "
                 f"use pet set ID {field.key}=... or promote first"
             )
-    if not _interactive(no_input):
+    if not _interactive(False):
         _fail("refine needs a terminal; use pet set ID KEY=VALUE or pet edit ID --field KEY")
     with _stoppable():
         wizard.refine(_session(store, idea_schema), idea, field)
