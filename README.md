@@ -1,14 +1,20 @@
 # metapet
 
-A small command-line tool for keeping your side-project ideas in one place.
+[![PyPI](https://img.shields.io/pypi/v/metapet)](https://pypi.org/project/metapet/)
+[![Python](https://img.shields.io/pypi/pyversions/metapet)](https://pypi.org/project/metapet/)
+[![CI](https://github.com/jrazi/metapet/actions/workflows/ci.yml/badge.svg)](https://github.com/jrazi/metapet/actions/workflows/ci.yml)
+[![License](https://img.shields.io/pypi/l/metapet)](https://github.com/jrazi/metapet/blob/main/LICENSE)
 
-Side-project ideas tend to end up spread across notes apps, chats and browser tabs,
-and most of them are hard to find again when you finally have time to build
-something. metapet keeps each idea as a Markdown file on your computer. Adding one
-takes a few seconds. Later you can come back and fill it in, as the idea grows from
-a rough thought into something you could start building.
+A small command-line tool for keeping side-project ideas as Markdown files.
 
-The command is `pet`.
+Most side-project ideas end up as a line in a notes app or a message to yourself,
+and by the time you have a free weekend the context is gone. metapet gives each
+idea its own Markdown file and a stage. You save an idea with one command, then fill
+it in over time: what problem it solves, how it could work, what to build first.
+When you want to start something, `pet next` suggests an idea based on how much you
+want to build it and how much work it looks like.
+
+![The full-screen view of metapet](https://raw.githubusercontent.com/jrazi/metapet/main/docs/screenshot.svg)
 
 ## Installation
 
@@ -16,150 +22,127 @@ The command is `pet`.
 uv tool install metapet
 ```
 
-or
+or `pipx install metapet`. metapet needs Python 3.11 or newer and installs a command
+called `pet`. To try it without installing, run `uvx --from metapet pet`.
 
-```sh
-pipx install metapet
+## Usage
+
+Run `pet init` once to create the folder where ideas are kept.
+
+### Save an idea
+
+```console
+$ pet add "Music library tagger" -t music -t cli \
+    -m "Tag and rename a messy music folder, using audio fingerprints to identify each track."
++ music-library-tagger  Music library tagger
 ```
 
-metapet needs Python 3.11 or newer. To try it without installing, run
-`uvx --from metapet pet --help`.
+`pet new` does the same, but asks for each field instead.
 
-## Quick start
+### Think it through
 
-```sh
-pet init                          # create the place where ideas are stored
-pet add "Plant watering bot"      # save an idea with just a name
-pet new                           # add an idea and answer a few questions about it
-pet ls                            # list your ideas
-pet promote plant                 # move an idea to its next stage
-pet                               # open the full-screen view
+Every idea has a stage: `seed`, `sketch`, `spec`, `building`, `shipped`, or
+`shelved` at any point. Moving an idea to the next stage asks that stage's questions.
+Press Enter to skip one.
+
+```console
+$ pet promote music
+? What problem does it solve? Half my music has no tags and junk file names
+? Who is it for? Me
+? How could it work, roughly? Fingerprint each file with AcoustID, look it up on MusicBrainz, show the changes before applying them
+? What is it worth if it exists?
+? Why is now a good time for it?
+music-library-tagger: seed → sketch
 ```
 
-You don't have to type the whole id: any part of the id or title that matches only
-one idea works, so `plant` finds `plant-watering-bot`.
+Any part of an id that matches only one idea works, so `music` is enough. The answers
+are saved as sections of the idea's file, and `pet refine music` lets you change them.
+`pet stages` lists the fields of each stage.
 
-## How it works
+### Add notes and ratings
 
-### Stages
+```sh
+pet note music "beets can do this, but its import step is a lot for one folder"
+pet set music excitement=5 impact=3 effort=M
+```
 
-Every idea has a stage:
+### Decide what to work on
 
-| Stage | Meaning |
-|---|---|
-| seed | a raw thought: a name, maybe a sentence |
-| sketch | thought through for a few minutes |
-| spec | concrete enough to start building from |
-| building | work has started |
-| shipped | done and usable |
-| shelved | put aside on purpose, with a reason |
+```console
+$ pet ls
+id                         title                    status  exc  tags        imp  effort
+train-ticket-price-alerts  Train ticket price ale…  seed      4  telegram      3  S
+music-library-tagger       Music library tagger     sketch    5  music, cli    3  M
+home-lab-status-page       Home lab status page     seed      3  selfhosted       M
+board-game-score-keeper    Board game score keeper  seed      2  mobile
 
-Each stage comes with a few questions, such as "What problem does it solve?" or
-"What is the smallest version you would actually use?". `pet promote` asks them when an idea
-moves to the next stage, and `pet refine` lets you answer them again later. You can
-skip any question. `pet stages` lists the fields of every stage.
+$ pet next
+id                         title             status  score  exc  tags        imp  effort
+train-ticket-price-alerts  Train ticket pr…  seed     7.00    4  telegram      3  S
+music-library-tagger       Music library t…  sketch   4.25    5  music, cli    3  M
+home-lab-status-page       Home lab status…  seed     3.00    3  selfhosted       M
+```
 
-### Idea files
+`pet next` ranks ideas by excitement plus impact, divided by effort. `pet show music`
+prints one idea, `pet search fingerprint` finds ideas by any word in them, and
+`pet review` goes through the ideas you haven't looked at in two weeks.
 
-Each idea is a Markdown file with a little YAML at the top. You can open it in any
-editor, or with `pet edit`:
+Run `pet` on its own to open the full-screen view shown above. See `pet --help` for
+all commands.
+
+## Idea files
+
+Each idea is a plain Markdown file, so you can also open it in any editor or with
+`pet edit music`. This is the file from the example above, without its two empty
+sections:
 
 ```markdown
 ---
-id: plant-watering-bot
-title: Plant watering bot
+id: music-library-tagger
+title: Music library tagger
 status: sketch
 created: 2026-09-25
 updated: 2026-09-25
 tags:
-- hardware
-excitement: 4
+- music
+- cli
+excitement: 5
+impact: 3
+effort: M
 ---
-Water the plants when the soil is dry.
+
+Tag and rename a messy music folder, using audio fingerprints to identify each track.
 
 ## Problem
-I forget to water them.
+Half my music has no tags and junk file names
+
+## Who it's for
+Me
+
+## Rough solution
+Fingerprint each file with AcoustID, look it up on MusicBrainz, show the changes before applying them
+
+## Notes
+- 2026-09-25: beets can do this, but its import step is a lot for one folder
 ```
-
-### Full-screen view
-
-`pet` on its own (or `pet ui`) shows your ideas with a preview of the selected one.
-
-| Key | Action |
-|---|---|
-| `/` | filter by words, `status:spec` or `tag:cli` |
-| `a` | add an idea |
-| `p` | promote to the next stage |
-| `r` | answer the idea's questions |
-| `n` | add a note |
-| `s` | shelve |
-| `e` | open in your editor |
-| `q` | quit |
-
-## Other useful commands
-
-```sh
-pet note plant "Try a capacitive soil sensor"   # add a dated note
-pet set plant excitement=5 +garden             # change a field or add a tag
-pet next                                        # suggest what to work on next
-pet review                                      # go through ideas you haven't looked at in a while
-pet search sensor                               # find ideas
-```
-
-Run `pet --help` for the full list, and `pet <command> --help` for details.
 
 ## Configuration
 
-### Where ideas are stored
+**Where ideas are kept.** By default in `~/.local/share/metapet` on Linux,
+`~/Library/Application Support/metapet` on macOS and `%LOCALAPPDATA%\metapet` on
+Windows. Set `METAPET_HOME` or pass `--home PATH` to use another folder.
+`pet where` shows the folder in use.
 
-pet stores ideas in the first of these that is set:
+**Your own questions.** Put a `stages.toml` in that folder to replace the questions
+of any stage. The [built-in file](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
+shows the format, and `pet check` reports mistakes.
 
-1. the `--home PATH` option
-2. the `METAPET_HOME` environment variable
-3. the default data folder for your system: `~/.local/share/metapet` on Linux,
-   `~/Library/Application Support/metapet` on macOS and `%LOCALAPPDATA%\metapet`
-   on Windows
+**Backup.** `pet init --git --remote <url>` makes the folder a git repository, and
+`pet sync` commits and pushes it. A folder synced by Dropbox, iCloud or Syncthing
+works too.
 
-`pet where` shows which folder is in use.
-
-### Custom stages
-
-To change the questions, put a `stages.toml` file in that folder. A stage you define
-there replaces the built-in stage with the same name:
-
-```toml
-[sketch]
-meaning = "thought through for a few minutes"
-
-[[sketch.fields]]
-key = "problem"
-label = "Problem"
-question = "What problem does it solve?"
-kind = "long"
-required = true
-```
-
-The [built-in stages.toml](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
-shows every option. `pet check` reports mistakes in your file.
-
-### Backup
-
-pet can keep the folder in its own git repository and sync it with a remote:
-
-```sh
-pet init --git --remote git@github.com:<you>/<your-ideas>.git
-pet sync
-```
-
-A folder synced by Dropbox, iCloud or Syncthing works too: point `METAPET_HOME` at it.
-
-### Shell completion
-
-```sh
-pet --install-completion
-```
-
-Open a new shell afterwards. Commands, options and idea ids will complete with Tab.
+**Shell completion.** `pet --install-completion` adds Tab completion for commands and
+idea ids in bash, zsh, fish and PowerShell.
 
 ## Development
 
@@ -168,9 +151,8 @@ git clone https://github.com/jrazi/metapet.git
 cd metapet
 uv sync
 uv run pytest
-uv run pet --help
 ```
 
 ## License
 
-MIT. See [LICENSE](https://github.com/jrazi/metapet/blob/main/LICENSE).
+[MIT](https://github.com/jrazi/metapet/blob/main/LICENSE)
