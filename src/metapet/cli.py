@@ -70,9 +70,8 @@ def _stage_rows(idea_schema: Schema) -> list[str]:
 
 def _lifecycle_help() -> str:
     return (
-        "[bold]Lifecycle:[/] seed → sketch → spec → building → shipped, or shelved at any point.\n"
-        + "\n".join(_stage_rows(schema.builtin()))
-        + "\n\n"
+        "[bold]Stages:[/] seed → sketch → spec → building → shipped, "
+        "or shelved at any point.\n" + "\n".join(_stage_rows(schema.builtin())) + "\n\n"
         "Fields marked * are expected before moving on; promote only warns when they are empty, "
         "and any question can be skipped. Change the stages in <data home>/stages.toml (see the "
         "README): a stage defined there replaces the built-in stage of the same name. "
@@ -142,7 +141,7 @@ class _App(typer.Typer):
 
 
 app = _App(
-    help="Capture and grow pet-project ideas.\n\n"
+    help="Keep pet-project ideas as Markdown files.\n\n"
     + LIFECYCLE_HELP
     + "\n\n[bold]Tab completion[/] (commands and idea ids): pet --install-completion, "
     "then open a new shell.\n\n"
@@ -816,7 +815,11 @@ def list_ideas(
     if not everything:
         console.print('No ideas yet. Capture one with pet add "..."', markup=False)
     elif not ideas:
-        console.print("No ideas match these filters." if status or tag else "No live ideas.")
+        console.print(
+            "No ideas match these filters."
+            if status or tag
+            else "All ideas are shipped or shelved."
+        )
     else:
         extra = (
             {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == SortKey.SCORE else None
@@ -1148,7 +1151,7 @@ def shelve(
 
 
 @app.command(
-    help="Go through live ideas you have not looked at for a while.\n\n"
+    help="Go through ideas you have not looked at for a while (not shipped or shelved).\n\n"
     "An idea counts as looked at when it was created, changed or reviewed. In a terminal, "
     "shows each idea, oldest first, and asks what to do with it: promote, refine, add a note, "
     "set excitement, shelve, skip or quit. Skip, or any action that changes the idea, marks "
@@ -1267,7 +1270,7 @@ def next_(
     all_ideas, broken = _store(ctx).scan()
     ranked = scoring.rank(all_ideas)[:count]
     if not ranked:
-        console.print('[dim]No live ideas. Capture one with[/] pet add "..."')
+        console.print('[dim]Nothing to suggest. Add an idea with[/] pet add "..."')
     else:
         ideas = [idea for idea, _ in ranked]
         _print_ideas(ideas, {"score": [f"{value:.2f}" for _, value in ranked]})
@@ -1276,17 +1279,17 @@ def next_(
 
 @app.command("random")
 def random_(ctx: typer.Context) -> None:
-    """Resurface a random seed or sketch you may have forgotten."""
+    """Show a random seed or sketch."""
     pool = [i for i in _store(ctx).all() if i.status in (Status.SEED, Status.SKETCH)]
     if not pool:
-        console.print("[dim]No seeds or sketches to resurface.[/]")
+        console.print("[dim]No seeds or sketches.[/]")
         return
     _print_idea(random.choice(pool), _schema(ctx))
 
 
 @app.command()
 def stats(ctx: typer.Context) -> None:
-    """Counts by status, tag and month."""
+    """Count ideas by stage, tag and month."""
     ideas, broken = _store(ctx).scan()
     if not ideas:
         console.print("[dim]No ideas yet.[/]")
@@ -1298,7 +1301,11 @@ def stats(ctx: typer.Context) -> None:
     recent = _last_months(dt.date.today(), 6)
 
     active = sum(1 for i in ideas if not i.status.terminal)
-    table = Table(title=f"{len(ideas)} {'idea' if len(ideas) == 1 else 'ideas'} ({active} active)", box=None, show_header=False)
+    table = Table(
+        title=f"{len(ideas)} {'idea' if len(ideas) == 1 else 'ideas'} ({active} active)",
+        box=None,
+        show_header=False,
+    )
     table.add_column(style="bold")
     table.add_column()
     table.add_row(
@@ -1334,7 +1341,7 @@ def stages_(ctx: typer.Context) -> None:
 
 @app.command()
 def check(ctx: typer.Context) -> None:
-    """Validate every idea file and stages.toml, and list empty expected fields."""
+    """Check every idea file and stages.toml, and list empty fields marked *."""
     store = _store(ctx)
     ideas, broken = store.scan()
     mismatched = [i for i in ideas if i.path and i.path.stem != i.id]
@@ -1407,7 +1414,7 @@ def sync_(
         str | None, typer.Option("--message", "-m", metavar="TEXT", help="Commit message.")
     ] = None,
 ) -> None:
-    """Back up the store: commit, pull --rebase, push (if it's a git repo)."""
+    """Back up with git: commit, pull and push (if the store is a git repo)."""
     store = _store(ctx)
     try:
         steps = sync.sync(store.home.path, message)
@@ -1424,7 +1431,7 @@ def export_(
         Path | None, typer.Option("--md", metavar="FILE", help="Write a Markdown index here.")
     ] = None,
     json_: Annotated[
-        Path | None, typer.Option("--json", metavar="FILE", help="Write a JSON dump here.")
+        Path | None, typer.Option("--json", metavar="FILE", help="Write all ideas as JSON here.")
     ] = None,
 ) -> None:
     """Export all ideas as a Markdown index and/or JSON.

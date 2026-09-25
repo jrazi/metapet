@@ -463,7 +463,7 @@ def test_review_ctrl_c_exits_130(home, monkeypatch):
 def test_bare_pet_without_a_terminal_prints_help(home):
     result = pet(home)
     assert result.exit_code == 0
-    assert "Usage" in result.output and "Capture and grow" in result.output
+    assert "Usage" in result.output and "Keep pet-project ideas" in result.output
 
 
 def test_bare_pet_in_a_terminal_opens_the_ui(home, monkeypatch):
