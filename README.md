@@ -222,7 +222,7 @@ excitement, impact and effort; the preview shows its id and details. Keys:
 | `/` | Filter: words, `status:spec`, `tag:cli` (Enter goes back to the list; Escape, in the filter or the list, clears it) |
 | `q` | Quit |
 | `a` | Add an idea |
-| `p` | Promote to the next stage |
+| `p` | Promote to the next stage; on a shelved or shipped idea, choose a stage to move it back to |
 | `r` | Refine: pick fields to answer |
 | `n` | Add a note |
 | `s` | Shelve, with a reason |

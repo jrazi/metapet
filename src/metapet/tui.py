@@ -29,6 +29,7 @@ from metapet.store import BrokenFile, Store
 
 EMPTY_STORE = "No ideas yet. Press a to add one."
 NOTICE_SECONDS = 3
+BACK_TO = (Status.SEED, Status.SKETCH, Status.SPEC, Status.BUILDING)
 TITLE_MIN = 10
 TITLE_DEFAULT = 40  # before the table has a size
 SCROLLBAR = 2
@@ -117,6 +118,34 @@ class ScalePrompt(ModalScreen[int | None]):
         self.dismiss(None)
 
 
+class ChoicePrompt(ModalScreen[str | None]):
+    """Pick one of a few options with the keys 1, 2, 3...; Escape cancels."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, question: str, options: list[str]):
+        super().__init__()
+        self.question = question
+        self.options = options
+
+    def compose(self) -> ComposeResult:
+        listed = ", ".join(f"{n} {option}" for n, option in enumerate(self.options, start=1))
+        with Vertical(classes="dialog"):
+            yield Label(f"{self.question} {listed}", markup=False)
+            yield Label(f"Press 1 to {len(self.options)}, or Escape to cancel.", classes="hint")
+        yield Footer()
+
+    def on_key(self, event) -> None:
+        if event.character and event.character.isdigit():
+            index = int(event.character) - 1
+            if 0 <= index < len(self.options):
+                event.stop()
+                self.dismiss(self.options[index])
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class FilterInput(Input):
     BINDINGS = [Binding("escape", "app.close_filter", "Close filter")]
 
@@ -147,7 +176,7 @@ class PetApp(App[None]):
     #filter { display: none; }
     #ideas { width: 3fr; }
     #preview-pane { width: 2fr; border-left: solid $primary; padding: 0 1; }
-    TextPrompt, ScalePrompt { align: center middle; }
+    TextPrompt, ScalePrompt, ChoicePrompt { align: center middle; }
     .dialog {
         width: 60; height: auto; padding: 1 2;
         border: round $accent; background: $surface;
@@ -484,10 +513,7 @@ class PetApp(App[None]):
             return
         target = idea.status.next()
         if target is None:
-            self.notify(
-                f"{idea.id} is {idea.status.value}; use pet promote {idea.id} --to STAGE.",
-                markup=False,
-            )
+            self.move_back(idea)
             return
         old = idea.status
         result: list[bool] = []
@@ -497,6 +523,21 @@ class PetApp(App[None]):
             self.notify("Not promoted.")
         elif result:
             self.notify(f"{idea.id}: {old.value} → {target.value}")
+
+    def move_back(self, idea: Idea) -> None:
+        """Bring a shelved or shipped idea back to a stage of the user's choice."""
+        old = idea.status
+        options = [status.value for status in BACK_TO]
+
+        def done(choice: str | None) -> None:
+            if choice is None:
+                return
+            stages.promote(idea, Status(choice), self.schema)
+            self.store.save(idea)
+            self.reload(idea.id)
+            self.notify(f"{idea.id}: {old.value} → {choice}", markup=False)
+
+        self.push_screen(ChoicePrompt(f"Move {idea.title} back to:", options), done)
 
     def action_refine(self) -> None:
         idea = self.selected()

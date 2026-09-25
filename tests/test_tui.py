@@ -411,3 +411,25 @@ def test_excitement_dialog_shows_current_value(store):
         assert labels[0] == "How excited are you about Budget tracker? (now 3)"
 
     run(app, test)
+
+
+def test_promote_shelved_idea_moves_back(store):
+    seeded(store)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        app.query_one("#filter", Input).value = "status:shelved"
+        await pilot.pause()
+        select(app, "old-game")
+        await pilot.press("p")
+        await pilot.pause()
+        labels = [str(label.render()) for label in app.screen.query("Label")]
+        assert labels[0] == "Move Old game back to: 1 seed, 2 sketch, 3 spec, 4 building"
+        await pilot.press("2")
+        await pilot.pause()
+        idea = on_disk(store, "old-game")
+        assert idea.status == Status.SKETCH
+        assert "Back from the shelf (it was shelved: no time)" in idea.body
+        assert notices(app)[-1] == "old-game: shelved → sketch"
+
+    run(app, test)
