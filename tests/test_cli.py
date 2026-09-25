@@ -726,3 +726,36 @@ def test_add_duplicate_prints_note(home, monkeypatch):
     assert result.exit_code == 0
     assert prompter.messages[-1].startswith("Nothing added.")
     assert len(list(home.ideas.iterdir())) == 2
+
+
+def failing_edit(*args, **kwargs):
+    raise cli.click.ClickException("/nonexistent: Editing failed")
+
+
+def test_edit_with_failing_editor_is_one_line(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    monkeypatch.setattr(cli.click, "edit", failing_edit)
+    for args in (["edit", "budget"], ["edit", "budget", "--field", "problem"]):
+        result = pet(home, *args)
+        assert result.exit_code == 1
+        assert result.output.splitlines() == [
+            "error: /nonexistent: Editing failed (set $EDITOR or $VISUAL)"
+        ]
+
+
+def test_edit_reports_broken_frontmatter(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    path = home.ideas / "budget-tracker.md"
+
+    def breaking_edit(filename=None, **kwargs):
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace("title: Budget tracker", "title: Budget: x: y"))
+
+    monkeypatch.setattr(cli.click, "edit", breaking_edit)
+    result = pet(home, "edit", "budget")
+    assert result.exit_code == 1
+    assert "budget-tracker.md cannot be read" in result.output
+    assert "pet check" in result.output

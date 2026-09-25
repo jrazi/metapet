@@ -22,7 +22,7 @@ from rich.text import Text
 
 from metapet import export, fields, ids, paths, schema, scoring, stages, sync, views, wizard
 from metapet import review as review_
-from metapet.model import Idea, Status, clean_title, is_long_title, short_title
+from metapet.model import Idea, IdeaError, Status, clean_title, is_long_title, short_title
 from metapet.prompter import Prompter
 from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import IdeaLookupError, Store
@@ -692,14 +692,14 @@ def edit(
     store = _store(ctx)
     idea = _find(store, idea_id)
     if field_name is None:
-        click.edit(filename=str(idea.path))
+        _edit_file(idea.path)
         return
     idea_schema = _schema(ctx)
     field = _field(idea_schema, field_name)
     if field.storage == Storage.FRONTMATTER:
         _fail(f"'{field.key}' is stored in the frontmatter; use pet set ID {field.key}=VALUE")
     current = fields.raw(idea, field)
-    edited = click.edit(text=current, extension=".md")
+    edited = _editor(text=current, extension=".md")
     if edited is None or edited.strip() == current.strip():
         console.print(f"{escape(idea.id)}: no change")
         return
@@ -707,6 +707,36 @@ def edit(
     idea.touch()
     store.save(idea)
     console.print(f"{escape(idea.id)}: {escape(field.label)} updated")
+
+
+def _editor(**kwargs) -> str | None:
+    """click.edit, with a failing or missing editor reported in one line."""
+    try:
+        return click.edit(**kwargs)
+    except click.ClickException as exc:
+        _fail(f"{escape(exc.format_message())} (set $EDITOR or $VISUAL)")
+
+
+def _edit_file(path: Path) -> None:
+    """Open an idea file in the editor, then check that it can still be read."""
+    while True:
+        _editor(filename=str(path))
+        try:
+            idea = Idea.load(path)
+        except IdeaError as exc:
+            problem = f"{escape(path.name)} cannot be read: {escape(str(exc))}"
+            if _interactive(False):
+                err.print(f"[red]error:[/] {problem}", soft_wrap=True)
+                if click.confirm("Open it again to fix it?", default=True):
+                    continue
+            _fail(f"{problem}\nFix it with pet edit {escape(path.stem)}; pet check lists the problems.")
+        if idea.id != path.stem:
+            err.print(
+                f"[yellow]warning:[/] the id in {escape(path.name)} is '{escape(idea.id)}', "
+                "which does not match the file name; use pet rename to change an id",
+                soft_wrap=True,
+            )
+        return
 
 
 @app.command(

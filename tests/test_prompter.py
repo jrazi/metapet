@@ -1,5 +1,7 @@
 import io
 
+import click
+
 import pytest
 from prompt_toolkit.document import Document
 from prompt_toolkit.input import create_pipe_input
@@ -7,7 +9,12 @@ from prompt_toolkit.output import DummyOutput
 from rich.console import Console
 
 from metapet.prompter import PartialAnswer, ScriptedPrompter
-from metapet.questionary_prompter import QuestionaryPrompter, TagCompleter, resolve_long
+from metapet.questionary_prompter import (
+    ASK_AGAIN,
+    QuestionaryPrompter,
+    TagCompleter,
+    resolve_long,
+)
 from metapet.views import Card
 
 DOWN = "j"  # questionary select also moves down with j
@@ -98,3 +105,22 @@ def test_items_ctrl_c_keeps_the_items_entered():
     with pytest.raises(KeyboardInterrupt) as exc:
         ask(CTRL_C, "items", "Features?", current=[])
     assert not isinstance(exc.value, PartialAnswer)
+
+
+def test_long_falls_back_when_editor_fails():
+    def failing(**kwargs):
+        raise click.ClickException("vim: Editing failed")
+
+    notes = []
+    assert resolve_long("e", "", edit=failing, notify=notes.append) is ASK_AGAIN
+    assert notes == ["Could not open the editor: vim: Editing failed. Type the answer here instead."]
+
+
+def test_long_asks_again_after_editor_failure(monkeypatch):
+    import metapet.questionary_prompter as qp
+
+    def failing(**kwargs):
+        raise click.ClickException("vim: Editing failed")
+
+    monkeypatch.setattr(qp.click, "edit", failing)
+    assert ask("e" + ENTER + "typed" + ENTER, "long", "Problem?") == "typed"

@@ -23,13 +23,30 @@ SKIP = "Skip"
 LONG_INSTRUCTION = "Enter to skip, or type e and Enter to write in your editor"
 
 
+# Returned by resolve_long when the editor could not be opened: ask the question again.
+ASK_AGAIN = object()
+
+
 def resolve_long(
-    raw: str, current: str, edit: Callable[..., str | None] = click.edit
-) -> str | None:
-    """Turn the answer to a long question into the new text; None keeps the current text."""
+    raw: str,
+    current: str,
+    edit: Callable[..., str | None] | None = None,
+    notify: Callable[[str], None] = lambda text: None,
+) -> Any:
+    """Turn the answer to a long question into the new text; None keeps the current text.
+
+    Returns ASK_AGAIN, after telling the user through notify, when the editor fails.
+    """
     answer = raw.strip()
     if answer.casefold() == "e":
-        edited = edit(text=current, extension=".md")
+        try:
+            edited = (edit or click.edit)(text=current, extension=".md")
+        except click.ClickException as exc:
+            notify(
+                f"Could not open the editor: {exc.format_message()}. "
+                "Type the answer here instead."
+            )
+            return ASK_AGAIN
         if edited is None or not edited.strip() or edited.strip() == current.strip():
             return None
         return edited.strip()
@@ -96,8 +113,11 @@ class QuestionaryPrompter:
         if current:
             self.console.print(f"[dim]{escape(current)}[/]")
             self.console.print("[dim]Enter keeps it.[/]")
-        raw = _ask(questionary.text(question, instruction=LONG_INSTRUCTION, **self.io))
-        return resolve_long(raw, current)
+        while True:
+            raw = _ask(questionary.text(question, instruction=LONG_INSTRUCTION, **self.io))
+            answer = resolve_long(raw, current, notify=self.message)
+            if answer is not ASK_AGAIN:
+                return answer
 
     def items(
         self, question: str, *, hint: str | None = None, current: list[str]
