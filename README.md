@@ -174,7 +174,7 @@ alias, or key with `_` read as a space). The old `templates/` folder is no longe
 | `pet check` | Validate idea files and `stages.toml`; list empty expected fields |
 | `pet where` | Show the data directory in use |
 | `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |
-| `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump |
+| `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump; `-` as FILE writes to standard output |
 
 In a terminal, `ls`, `search`, `next` and `review` show a table with one line per idea;
 when the terminal is narrow, long titles are cut with `…` and the least important

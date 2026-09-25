@@ -877,3 +877,22 @@ def test_search_empty_is_error(home):
     pet(home, "init")
     result = pet(home, "search", "")
     assert result.exit_code == 1 and "give words to search for" in result.output
+
+
+def test_export_to_stdout(home, tmp_path, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    monkeypatch.chdir(tmp_path)
+    result = pet(home, "export", "--md", "-")
+    assert result.exit_code == 0
+    assert result.output.startswith("# Ideas") and "wrote" not in result.output
+    assert not (tmp_path / "-").exists()
+    assert json.loads(pet(home, "export", "--json", "-").output)[0]["id"] == "budget-tracker"
+
+
+def test_export_missing_dir_is_error(home, tmp_path):
+    pet(home, "init")
+    missing = tmp_path / "nope" / "x.md"
+    result = pet(home, "export", "--md", str(missing))
+    assert result.exit_code == 1
+    assert result.output == f"error: directory {missing.parent} does not exist\n"

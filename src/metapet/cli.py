@@ -132,7 +132,7 @@ def _store(ctx: typer.Context, *, must_exist: bool = True) -> Store:
 
 
 def _fail(message: str) -> NoReturn:
-    err.print(f"[red]error:[/] {message}")
+    err.print(f"[red]error:[/] {message}", soft_wrap=True, highlight=False)
     raise typer.Exit(1)
 
 
@@ -1234,14 +1234,31 @@ def sync_(
 @app.command("export")
 def export_(
     ctx: typer.Context,
-    md: Annotated[Path | None, typer.Option("--md", help="Write a Markdown index here.")] = None,
-    json_: Annotated[Path | None, typer.Option("--json", help="Write a JSON dump here.")] = None,
+    md: Annotated[
+        Path | None, typer.Option("--md", metavar="FILE", help="Write a Markdown index here.")
+    ] = None,
+    json_: Annotated[
+        Path | None, typer.Option("--json", metavar="FILE", help="Write a JSON dump here.")
+    ] = None,
 ) -> None:
-    """Export all ideas as a Markdown index and/or JSON."""
+    """Export all ideas as a Markdown index and/or JSON.
+
+    Use - as FILE to write to standard output. Links in the Markdown index are relative to the directory of FILE.
+    """
     if not md and not json_:
         _fail("pass --md FILE and/or --json FILE")
+    for target in (md, json_):
+        if target and str(target) != "-" and not target.parent.is_dir():
+            _fail(f"directory {escape(str(target.parent))} does not exist")
     ideas = _store(ctx).all()
-    for target, render in ((md, export.to_markdown), (json_, export.to_json)):
-        if target:
-            target.write_text(render(ideas), encoding="utf-8")
-            console.print(f"[green]✓[/] wrote {target}")
+    for target, render in (
+        (md, lambda: export.to_markdown(ideas, md.parent if str(md) != "-" else Path.cwd())),
+        (json_, lambda: export.to_json(ideas)),
+    ):
+        if not target:
+            continue
+        if str(target) == "-":
+            typer.echo(render(), nl=False)
+            continue
+        target.write_text(render(), encoding="utf-8")
+        console.print(f"[green]✓[/] wrote {escape(str(target))}", soft_wrap=True, highlight=False)
