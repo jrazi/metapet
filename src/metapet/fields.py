@@ -18,9 +18,9 @@ Order = Callable[[str], int | None]
 # Keys `set` refuses, with the reason.
 NOT_SETTABLE = {
     "status": "use pet promote or pet shelve to change the status",
+    "id": "use pet rename ID NEW_ID to change the id",
     **{
-        key: f"'{key}' cannot be set"
-        for key in ("id", "created", "updated", "reviewed", "shelved_reason")
+        key: f"'{key}' cannot be set" for key in ("created", "updated", "reviewed", "shelved_reason")
     },
 }
 SCALE_NUMBER = re.compile(r"\b([1-5])\b")

@@ -19,7 +19,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from metapet import export, fields, paths, schema, scoring, stages, sync, wizard
+from metapet import export, fields, ids, paths, schema, scoring, stages, sync, wizard
 from metapet import review as review_
 from metapet.model import Idea, Status, clean_title
 from metapet.prompter import Prompter
@@ -184,6 +184,16 @@ def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     return [(idea.id, idea.title) for idea in sorted(matches, key=lambda i: i.id)]
 
 
+IdOption = Annotated[
+    str | None,
+    typer.Option(
+        "--id",
+        metavar="ID",
+        help="Use this id instead of one made from the title (lowercase letters, digits and "
+        "hyphens).",
+    ),
+]
+
 NoInput = Annotated[
     bool, typer.Option("--no-input", help="Never ask questions; use only the values given.")
 ]
@@ -336,6 +346,7 @@ def add(
             "--interactive", "-i", help="Then ask the other seed questions (in a terminal only)."
         ),
     ] = False,
+    id_: IdOption = None,
 ) -> None:
     """Capture a seed instantly, without opening an editor.
 
@@ -344,9 +355,13 @@ def add(
     store = _store(ctx)
     idea_schema = _schema(ctx) if interactive else None
     try:
-        idea = store.create(title, tags=list(tag or []), body=note or "")
+        clean_title(title)
     except ValueError:
         _fail('a title is required: pet add "TITLE"')
+    try:
+        idea = store.create(title, id=id_, tags=list(tag or []), body=note or "")
+    except ValueError as exc:
+        _fail(escape(str(exc)))
     console.print(f"[green]+[/] {escape(idea.id)}  [dim]{escape(str(idea.path))}[/]", soft_wrap=True)
     if idea_schema is None:
         return
@@ -390,6 +405,7 @@ def new(
             help="Any other field, e.g. --set effort=M (repeatable; see pet set --help).",
         ),
     ] = None,
+    id_: IdOption = None,
     no_input: NoInput = False,
 ) -> None:
     """Capture an idea with its seed fields.
@@ -400,6 +416,11 @@ def new(
     """
     store = _store(ctx)
     idea_schema = _schema(ctx)
+    if id_ is not None:
+        try:
+            id_ = store.check_new_id(id_)
+        except ValueError as exc:
+            _fail(escape(str(exc)))
     interactive = _interactive(no_input)
     session = _session(store, idea_schema) if interactive else None
     if not title or not title.strip():
@@ -424,7 +445,7 @@ def new(
         if clashes:
             raise ValueError(f"'{clashes[0]}' is given both as a flag and with --set")
         title = clean_title(title)
-        idea = Idea(id=store.unique_id(title), title=title)
+        idea = Idea(id=id_ or store.unique_id(title), title=title)
         fields.apply_changes(idea, idea_schema, fields.parse_changes(tokens) + extra)
     except ValueError as exc:
         _fail(escape(str(exc)))
@@ -566,6 +587,41 @@ def note(
         _fail(escape(str(exc)))
     store.save(idea)
     console.print(f"{escape(idea.id)}: noted")
+
+
+@app.command()
+def rename(
+    ctx: typer.Context,
+    idea_id: IdArg,
+    new_id: Annotated[
+        str | None,
+        typer.Argument(
+            metavar="NEW_ID",
+            help="The new id (lowercase letters, digits and hyphens). Leave it out to make one "
+            "from the title.",
+        ),
+    ] = None,
+) -> None:
+    """Change an idea's id and file name.
+
+    Other ideas that list the old id under related are updated. After changing the title with pet set ID title=..., run pet rename ID to make the id match it.
+    """
+    store = _store(ctx)
+    idea = _find(store, idea_id)
+    old_id = idea.id
+    if new_id is None:
+        suggested = ids.suggest(idea.title).id
+        new_id = old_id if suggested == old_id else store.unique(suggested)
+    if new_id.strip().lower() == old_id:
+        console.print(f"{escape(old_id)}: no change")
+        return
+    try:
+        changed = store.rename(idea, new_id)
+    except ValueError as exc:
+        _fail(escape(str(exc)))
+    console.print(f"{escape(old_id)} → {escape(idea.id)}")
+    if changed:
+        console.print(f"updated related in: {escape(', '.join(i.id for i in changed))}")
 
 
 # -- lifecycle ---------------------------------------------------------------
@@ -823,7 +879,7 @@ def check(ctx: typer.Context) -> None:
     for idea in mismatched:
         err.print(
             f"[yellow]![/] {escape(idea.path.name)}: id is '{escape(idea.id)}' "
-            "(rename the file to match)"
+            "(rename the file to match, or run pet rename)"
         )
     try:
         idea_schema = schema.load(store.home)

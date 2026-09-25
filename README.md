@@ -75,6 +75,18 @@ Only `id`, `title`, `status` and `created` are required. Optional fields are
 `updated`, `reviewed`, `tags`, `excitement`, `impact`, `effort`, `repo`, `related`
 and `shelved_reason`. Unknown keys are preserved.
 
+### Ids
+
+Each idea has an id, which is also its file name and what you type in commands.
+pet makes it from the title: lowercase letters, digits and hyphens, at most 40
+characters, cut at a whole word. Titles in other scripts are spelled in Latin letters
+(`Телеграм бот` becomes `telegram-bot`) so the id can be typed on any keyboard. You do
+not have to type the whole id: any unique prefix or fragment of the id or title works.
+
+Choose the id yourself with `pet add TITLE --id ID` (or `pet new --id ID`). Change it
+later with `pet rename ID NEW_ID`; without `NEW_ID` the id is made again from the
+current title. Other ideas that list the old id under `related` are updated.
+
 ### Lifecycle
 
 `seed → sketch → spec → building → shipped`, or `shelved` at any point.
@@ -137,13 +149,14 @@ shows the stages and field keys in use, and `pet check` reports mistakes in your
 | Command | What it does |
 |---|---|
 | `pet init [--local] [--git] [--remote URL]` | Create the store, optionally as a git repo |
-| `pet add TITLE [-t TAG]… [-m NOTE] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
-| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
+| `pet add TITLE [-t TAG]… [-m NOTE] [--id ID] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
+| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--id ID] [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
 | `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved) |
 | `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment |
 | `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
 | `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields; an empty value clears one |
 | `pet note ID TEXT` | Add a dated line to the Notes section |
+| `pet rename ID [NEW_ID]` | Change an idea's id and file name; without `NEW_ID`, make it from the title |
 | `pet promote ID [--to STATUS] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
 | `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
 | `pet shelve ID REASON` | Park an idea, remembering why |

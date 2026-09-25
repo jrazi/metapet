@@ -125,3 +125,24 @@ def test_create_collapses_whitespace(store):
     idea = store.create("Budget  Tracker!\n")
     assert idea.title == "Budget Tracker!"
     assert "title: Budget Tracker!" in idea.path.read_text()
+
+
+def test_rename_moves_file_and_updates_related(store):
+    plants = store.create("Plant bot", id="plants")
+    other = store.create("Other", related=["plants", "x"])
+    store.create("Unrelated", related=["x"])
+    changed = store.rename(plants, "watering")
+    assert [i.id for i in changed] == [other.id]
+    assert not (store.home.ideas / "plants.md").exists()
+    assert Idea.load(store.home.ideas / "watering.md").id == "watering"
+    assert Idea.load(other.path).related == ["watering", "x"]
+
+
+def test_rename_refuses_existing_id(store):
+    one = store.create("One")
+    store.create("Two")
+    with pytest.raises(ValueError, match="an idea with id 'two' already exists"):
+        store.rename(one, "two")
+    with pytest.raises(ValueError, match="single hyphens"):
+        store.rename(one, "Bad Id")
+    assert (store.home.ideas / "one.md").exists()

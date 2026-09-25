@@ -96,12 +96,46 @@ class Store:
     def unique_id(self, title: str, today: dt.date | None = None) -> str:
         return self.unique(ids.suggest(title, today).id)
 
-    def create(self, title: str, **fields) -> Idea:
+    def check_new_id(self, idea_id: str) -> str:
+        """A typed id, validated and not in use yet; ValueError otherwise."""
+        idea_id = ids.validate(idea_id)
+        if self.exists(idea_id):
+            raise ValueError(f"an idea with id '{idea_id}' already exists")
+        return idea_id
+
+    def create(self, title: str, *, id: str | None = None, **fields) -> Idea:
+        """Create and save an idea; `id` is checked with check_new_id when given."""
         self.require()
         title = clean_title(title)
-        idea = Idea(id=self.unique_id(title), title=title, **fields)
+        idea_id = self.check_new_id(id) if id is not None else self.unique_id(title)
+        idea = Idea(id=idea_id, title=title, **fields)
         self.save(idea)
         return idea
+
+    def rename(self, idea: Idea, new_id: str) -> list[Idea]:
+        """Give an idea a new id and file name, and update the related lists that name it.
+
+        Returns the other ideas whose related list changed.
+        """
+        new_id = ids.validate(new_id)
+        if new_id == idea.id:
+            raise ValueError(f"{idea.id}: no change")
+        if self.exists(new_id):
+            raise ValueError(f"an idea with id '{new_id}' already exists")
+        old_id, old_path = idea.id, idea.path
+        others = [other for other in self.all() if other.path != old_path]
+        idea.id = new_id
+        idea.path = self.home.ideas / f"{new_id}.md"
+        self.save(idea)
+        if old_path is not None and old_path != idea.path:
+            old_path.unlink(missing_ok=True)
+        changed = []
+        for other in others:
+            if old_id in other.related:
+                other.related = [new_id if item == old_id else item for item in other.related]
+                self.save(other)
+                changed.append(other)
+        return changed
 
     def save(self, idea: Idea) -> Path:
         path = idea.path or self.home.ideas / f"{idea.id}.md"

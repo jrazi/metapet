@@ -462,3 +462,40 @@ def test_add_rejects_blank_title(home):
         assert result.exit_code == 1
         assert 'a title is required: pet add "TITLE"' in result.output
     assert list(home.ideas.iterdir()) == []
+
+
+def test_add_and_new_accept_id(home):
+    pet(home, "init")
+    assert pet(home, "add", "Plant bot", "--id", "plants").exit_code == 0
+    assert (home.ideas / "plants.md").exists()
+    assert pet(home, "new", "Garden", "--id", "Garden-Two", "--no-input").exit_code == 0
+    assert (home.ideas / "garden-two.md").exists()
+    result = pet(home, "add", "X", "--id", "Bad Id")
+    assert result.exit_code == 1 and "single hyphens" in result.output
+    result = pet(home, "new", "X", "--id", "plants", "--no-input")
+    assert result.exit_code == 1 and "an idea with id 'plants' already exists" in result.output
+    assert sorted(p.name for p in home.ideas.iterdir()) == ["garden-two.md", "plants.md"]
+
+
+def test_rename_without_new_id_uses_title(home):
+    pet(home, "init")
+    pet(home, "add", "Plant bot", "--id", "plants")
+    pet(home, "add", "Other")
+    pet(home, "set", "other", "related=plants")
+    result = pet(home, "rename", "plants", "watering")
+    assert result.exit_code == 0, result.output
+    assert "plants → watering" in result.output
+    assert "updated related in: other" in result.output
+    assert "- watering" in idea_text(home, "other")
+    pet(home, "set", "watering", "title=Garden helper")
+    result = pet(home, "rename", "watering")
+    assert "watering → garden-helper" in result.output
+    assert "garden-helper: no change" in pet(home, "rename", "garden-helper").output
+
+
+def test_set_id_points_to_rename(home):
+    pet(home, "init")
+    pet(home, "add", "Garden")
+    result = pet(home, "set", "garden", "id=x")
+    assert result.exit_code == 1
+    assert "use pet rename ID NEW_ID to change the id" in result.output
