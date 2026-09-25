@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import sys
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -163,12 +163,18 @@ def _session(store: Store, idea_schema: Schema) -> wizard.Session:
 
 
 @contextmanager
-def _stoppable() -> Iterator[None]:
-    """Turn Ctrl-C during questions into a short message and exit code 130."""
+def _stoppable(created: Callable[[], bool] = lambda: True) -> Iterator[None]:
+    """Turn Ctrl-C or Ctrl-D during questions into a short message and exit code 130.
+
+    `created` tells whether an idea exists yet, and so whether anything was saved.
+    """
     try:
         yield
-    except KeyboardInterrupt:
-        err.print("Stopped. Answers so far are saved.")
+    except (KeyboardInterrupt, EOFError):
+        if created():
+            err.print("Stopped. Answers so far are saved.")
+        else:
+            err.print("Cancelled. Nothing was saved.")
         raise typer.Exit(130) from None
 
 
@@ -568,7 +574,7 @@ def new(
         idea_id = id_ or store.unique_id(title)
         _note_same(store.same_title(title))
     else:
-        with _stoppable():
+        with _stoppable(created=lambda: False):
             name = wizard.ask_name(session, title if title and title.strip() else None, id_)
         if name is None:
             return

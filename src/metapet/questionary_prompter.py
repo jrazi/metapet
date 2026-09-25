@@ -35,6 +35,14 @@ def resolve_long(
     return answer or None
 
 
+def _ask(question: questionary.Question) -> Any:
+    """Ask, turning Ctrl-D (EOFError) into Ctrl-C so both stop the questions the same way."""
+    try:
+        return question.unsafe_ask()
+    except EOFError:
+        raise KeyboardInterrupt from None
+
+
 class TagCompleter(Completer):
     """Completes the tag after the last comma from the tags already in use."""
 
@@ -79,7 +87,7 @@ class QuestionaryPrompter:
 
     def text(self, question: str, *, hint: str | None = None, default: str = "") -> str | None:
         answer = questionary.text(question, default=default, instruction=hint, **self.io)
-        return answer.unsafe_ask().strip() or None
+        return _ask(answer).strip() or None
 
     def long(self, question: str, *, hint: str | None = None, current: str = "") -> str | None:
         if hint:
@@ -87,7 +95,7 @@ class QuestionaryPrompter:
         if current:
             self.console.print(f"[dim]{escape(current)}[/]")
             self.console.print("[dim]Enter keeps it.[/]")
-        raw = questionary.text(question, instruction=LONG_INSTRUCTION, **self.io).unsafe_ask()
+        raw = _ask(questionary.text(question, instruction=LONG_INSTRUCTION, **self.io))
         return resolve_long(raw, current)
 
     def items(
@@ -101,11 +109,11 @@ class QuestionaryPrompter:
             for item in current:
                 self.console.print(f"  - {escape(item)}")
             keep = questionary.confirm(f"Keep these {len(current)} items?", default=True, **self.io)
-            if keep.unsafe_ask():
+            if _ask(keep):
                 result = list(current)
         while True:
             prompt = f"  item {len(result) + 1} (Enter to finish)"
-            item = questionary.text(prompt, qmark="", **self.io).unsafe_ask().strip()
+            item = _ask(questionary.text(prompt, qmark="", **self.io)).strip()
             if not item:
                 break
             result.append(item)
@@ -135,27 +143,31 @@ class QuestionaryPrompter:
         """A select with Skip first; returns None for Skip."""
         choices = [questionary.Choice(SKIP, value=""), *options]
         start = default if default in options else ""
-        answer = questionary.select(
-            question, choices=choices, default=start, instruction=hint, **self.io
-        ).unsafe_ask()
+        answer = _ask(
+            questionary.select(
+                question, choices=choices, default=start, instruction=hint, **self.io
+            )
+        )
         return answer or None
 
     def tags(
         self, question: str, *, hint: str | None = None, current: list[str], known: list[str]
     ) -> list[str] | None:
-        raw = questionary.text(
-            question,
-            default=", ".join(current),
-            instruction=hint,
-            completer=TagCompleter(known),
-            **self.io,
-        ).unsafe_ask()
+        raw = _ask(
+            questionary.text(
+                question,
+                default=", ".join(current),
+                instruction=hint,
+                completer=TagCompleter(known),
+                **self.io,
+            )
+        )
         tags = [part.strip() for part in raw.split(",") if part.strip()]
         return tags or None
 
     def select(self, question: str, options: list[tuple[str, str]]) -> str:
         choices = [questionary.Choice(label, value=value) for value, label in options]
-        return questionary.select(question, choices=choices, **self.io).unsafe_ask()
+        return _ask(questionary.select(question, choices=choices, **self.io))
 
     def confirm(self, question: str, *, default: bool = False) -> bool:
-        return questionary.confirm(question, default=default, **self.io).unsafe_ask()
+        return _ask(questionary.confirm(question, default=default, **self.io))

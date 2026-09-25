@@ -344,11 +344,15 @@ def test_ctrl_c_keeps_answers_and_exits_130(home, monkeypatch):
     assert "Track spending." in idea_text(home, "budget-tracker")
 
 
-def test_ctrl_c_before_the_title_creates_nothing(home, monkeypatch):
+def test_ctrl_c_before_title_says_nothing_saved(home, monkeypatch):
     pet(home, "init")
-    interactive(monkeypatch, [KeyboardInterrupt()])
-    assert pet(home, "new").exit_code == 130
-    assert list(home.ideas.iterdir()) == []
+    for stop in (KeyboardInterrupt(), EOFError()):
+        interactive(monkeypatch, [stop])
+        result = pet(home, "new")
+        assert result.exit_code == 130
+        assert "Cancelled. Nothing was saved." in result.output
+        assert "Answers so far" not in result.output
+        assert list(home.ideas.iterdir()) == []
 
 
 def test_refine_in_a_terminal(home, monkeypatch):

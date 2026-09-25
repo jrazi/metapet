@@ -27,7 +27,7 @@ EXCITEMENT = Field(
 class ReviewResult:
     handled: int
     remaining: int
-    stopped: bool = False  # True when Ctrl-C ended the review
+    stopped: bool = False  # True when Ctrl-C or Ctrl-D ended the review
 
 
 def last_seen(idea: Idea) -> dt.date:
@@ -132,6 +132,6 @@ def run(s: wizard.Session, ideas: list[Idea], today: dt.date | None = None) -> R
                 break
             handled += 1
             done += 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         return ReviewResult(handled, total - done, stopped=True)
     return ReviewResult(handled, total - done)

@@ -244,3 +244,48 @@ def test_preview_hides_empty_sections(store):
         assert "## Problem" not in source
 
     run(app, test)
+
+
+def test_empty_note_keeps_dialog_open(store):
+    seeded(store)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        await pilot.press("n", "enter")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, TextPrompt)
+        hints = [str(label.render()) for label in screen.query(".hint")]
+        assert hints == ["Type something, or press Escape to cancel."]
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, TextPrompt)
+
+    run(app, test)
+
+
+def notices(app) -> list[str]:
+    return [n.message for n in app._notifications]
+
+
+def test_add_cancelled_says_nothing_added(store):
+    seeded(store)
+    app, _ = make_app(store, [KeyboardInterrupt()])
+
+    async def test(pilot):
+        await pilot.press("a")
+        await pilot.pause()
+        assert notices(app) == ["Nothing added."]
+
+    run(app, test)
+
+
+def test_empty_store_keys_say_how_to_add(store):
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        await pilot.press("n", "p", "s")
+        await pilot.pause()
+        assert notices(app) == [EMPTY_STORE]
+
+    run(app, test)

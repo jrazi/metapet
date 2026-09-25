@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import time
 from collections.abc import Callable
 
 import click
@@ -27,7 +28,9 @@ from metapet.schema import Schema
 from metapet.store import Store
 
 EMPTY_STORE = "No ideas yet. Press a to add one."
+NOTICE_SECONDS = 3
 NO_MATCH = "No ideas match the filter."
+EMPTY_ANSWER = "Type something, or press Escape to cancel."
 STATUS_STYLE = {
     Status.SEED: "green",
     Status.SKETCH: "cyan",
@@ -57,7 +60,10 @@ class TextPrompt(ModalScreen[str | None]):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
-        self.dismiss(event.value.strip() or None)
+        if not event.value.strip():
+            self.query_one(".hint", Label).update(EMPTY_ANSWER)
+            return
+        self.dismiss(event.value.strip())
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -154,6 +160,8 @@ class PetApp(App[None]):
         self.shown: list[Idea] = []
         self.broken = 0
         self.hint_shown = False  # the "Press Enter to skip" hint, shown once per run
+        self.last_notice = ""
+        self.last_notice_time = 0.0
         self.sessions: list[wizard.Session] = []
 
     # -- layout ------------------------------------------------------------------
@@ -238,7 +246,7 @@ class PetApp(App[None]):
         """The idea under the cursor, read again from its file."""
         idea = self.current()
         if idea is None:
-            self.notify("No idea selected.")
+            self.notify_once(EMPTY_STORE if not self.ideas else "No idea selected.")
             return None
         try:
             return Idea.load(idea.path) if idea.path else idea
@@ -338,20 +346,32 @@ class PetApp(App[None]):
 
     def _suspend_and_run(self, fn: Callable[[], None]) -> None:
         try:
-            with self.suspend(), contextlib.suppress(KeyboardInterrupt):
+            with self.suspend(), contextlib.suppress(KeyboardInterrupt, EOFError):
                 _run_in_thread(fn)
         except SuspendNotSupported:
             self.notify("Not supported in this terminal", severity="error")
 
-    def outside(self, fn: Callable[[], None]) -> None:
-        """Run fn with the UI suspended, then report Ctrl-C or editor problems."""
+    def notify_once(self, message: str) -> None:
+        """A short notification, not repeated while the same one is still showing."""
+        now = time.monotonic()
+        if message == self.last_notice and now - self.last_notice_time < NOTICE_SECONDS:
+            return
+        self.last_notice, self.last_notice_time = message, now
+        self.notify(message, timeout=NOTICE_SECONDS, markup=False)
+
+    def outside(self, fn: Callable[[], None], created: Callable[[], bool] = lambda: True) -> None:
+        """Run fn with the UI suspended, then report Ctrl-C or editor problems.
+
+        `created` tells whether an idea exists yet, and so whether stopping kept anything.
+        """
         problems: list[str] = []
 
         def guarded() -> None:
             try:
                 fn()
-            except KeyboardInterrupt:
-                problems.append("Stopped. Answers so far are saved.")
+            except (KeyboardInterrupt, EOFError):
+                if created():
+                    problems.append("Stopped. Answers so far are saved.")
             except click.ClickException as exc:
                 problems.append(exc.format_message())
 
@@ -374,8 +394,10 @@ class PetApp(App[None]):
             wizard.new_idea(s, idea, {"title"})
             wizard.continue_stages(s, idea)
 
-        self.outside(fn)
+        self.outside(fn, created=lambda: bool(created))
         self.reload(created[0] if created else None)
+        if not created:
+            self.notify_once("Nothing added.")
 
     def action_promote(self) -> None:
         idea = self.selected()
