@@ -629,3 +629,20 @@ def test_check_reports_long_ids(home):
     assert f"{long_id}.md: id is longer than 40 characters; shorten it with pet rename" in (
         result.output
     )
+
+
+def test_show_prints_full_title_and_id(home):
+    pet(home, "init")
+    title = " ".join(["word"] * 40)  # 199 characters
+    pet(home, "add", title, "--id", "flash")
+    pet(home, "promote", "flash", "--no-input")
+    result = runner.invoke(app, ["--home", str(home.path), "show", "flash"], env={"COLUMNS": "80"})
+    assert result.exit_code == 0, result.output
+    assert " ".join(result.output.split()).count(title) == 1
+    assert "flash · sketch" in result.output
+    assert "## Problem" not in result.output and "Problem" not in result.output.split("Empty:")[0]
+    assert "Empty: Problem*, Who it's for, Rough solution*, Value, Why now" in result.output
+    pet(home, "set", "flash", "problem=Hard to review")
+    output = pet(home, "show", "flash").output
+    assert "Problem" in output.split("Empty:")[0] and "Hard to review" in output
+    assert "Empty: Who it's for" in output

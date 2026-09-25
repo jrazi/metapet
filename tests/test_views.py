@@ -31,9 +31,28 @@ def test_card_without_summary():
 def test_preview_markdown():
     idea = Idea(id="x", title="X", tags=["a"], excitement=3, impact=5, body="Body.")
     assert (
-        views.preview_markdown(idea)
-        == "# X\n\nseed · tags: a · excitement 3/5 · impact 5/5\n\nBody.\n"
+        views.preview_markdown(idea, S)
+        == "# X\n\nx · seed · tags: a · excitement 3/5 · impact 5/5\n\nBody.\n"
     )
+
+
+def test_preview_markdown_lists_empty_sections():
+    idea = Idea(id="x", title="X", body="## Problem\n<!-- q -->\n\n## Value\nMoney.\n")
+    assert views.preview_markdown(idea, S) == (
+        "# X\n\nx · seed\n\n## Value\nMoney.\n\n*Empty: Problem\\**\n"
+    )
+
+
+def test_visible_body_hides_empty_sections():
+    idea = Idea(
+        id="x",
+        title="X",
+        body="Summary.\n\n## Problem\n<!-- What problem? -->\n\n## Who it's for\nMe.\n\n"
+        "## Features\n- \n\n## Mine\n\n## Value\n",
+    )
+    body, empty = views.visible_body(idea, S)
+    assert body == "Summary.\n\n## Who it's for\nMe.\n"
+    assert empty == ["Problem*", "Features*", "Mine", "Value"]
 
 
 def test_filter_ideas():

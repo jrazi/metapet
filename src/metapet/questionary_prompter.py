@@ -64,15 +64,13 @@ class QuestionaryPrompter:
     # -- output --------------------------------------------------------------
 
     def card(self, card: Card) -> None:
-        lines = [f"[dim]stage:[/] {escape(card.stage)}"]
+        lines = [f"[bold]{escape(card.title)}[/]", f"[dim]stage:[/] {escape(card.stage)}"]
         if card.summary:
             lines.append(escape(card.summary))
         if card.answers:
             lines.append("")
             lines += [f"[bold]{escape(label)}:[/] {escape(value)}" for label, value in card.answers]
-        self.console.print(
-            Panel("\n".join(lines), title=f"[bold]{escape(card.title)}[/]", expand=False)
-        )
+        self.console.print(Panel("\n".join(lines), expand=False))
 
     def message(self, text: str) -> None:
         self.console.print(text, markup=False, highlight=False)

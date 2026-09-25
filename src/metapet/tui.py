@@ -229,7 +229,7 @@ class PetApp(App[None]):
     def show_preview(self) -> None:
         idea = self.current()
         if idea is not None:
-            text = views.preview_markdown(idea)
+            text = views.preview_markdown(idea, self.schema)
         else:
             text = NO_MATCH if self.ideas else EMPTY_STORE
         self.query_one("#preview", Markdown).update(text)

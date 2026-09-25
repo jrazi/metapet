@@ -229,3 +229,18 @@ def test_q_quits(store):
         assert not app.is_running
 
     run(app, test)
+
+
+def test_preview_hides_empty_sections(store):
+    idea = store.create("Budget tracker")
+    stages.move(idea, Status.SKETCH, S)
+    store.save(idea)
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        source = app.query_one("#preview").source
+        assert "budget-tracker · sketch" in source
+        assert "Empty: Problem" in source
+        assert "## Problem" not in source
+
+    run(app, test)

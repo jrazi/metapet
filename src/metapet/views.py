@@ -29,9 +29,35 @@ def card(idea: Idea, schema: Schema) -> Card:
     return Card(idea.title, idea.status.value, summary, answers)
 
 
-def preview_markdown(idea: Idea) -> str:
+def visible_body(idea: Idea, schema: Schema) -> tuple[str, list[str]]:
+    """The body without its empty sections, and the names of those sections.
+
+    A section counts as empty when it holds only whitespace, comments or bare list markers.
+    Required fields are marked with *.
+    """
+    body = sections.parse(idea.body)
+    kept: list[sections.Section] = []
+    empty: list[str] = []
+    for section in body.sections:
+        if not sections.is_empty(section.content):
+            kept.append(section)
+            continue
+        field = next((f for f in schema.section_fields() if f.matches_heading(section.heading)), None)
+        if field is None:
+            empty.append(section.heading)
+        else:
+            empty.append(f"{field.label}*" if field.required else field.label)
+    preamble = sections.strip_comments(body.preamble).strip()
+    return sections.render(sections.Body(preamble, kept)), empty
+
+
+def empty_line(empty: list[str]) -> str:
+    return "Empty: " + ", ".join(empty) if empty else ""
+
+
+def preview_markdown(idea: Idea, schema: Schema) -> str:
     """The idea as one Markdown document: title, a line of details, then the body."""
-    meta = [idea.status.value]
+    meta = [idea.id, idea.status.value]
     if idea.tags:
         meta.append("tags: " + ", ".join(idea.tags))
     for name in ("excitement", "impact"):
@@ -40,8 +66,12 @@ def preview_markdown(idea: Idea) -> str:
     if idea.effort:
         meta.append(f"effort {idea.effort.value}")
     parts = [f"# {idea.title}", " · ".join(meta)]
-    if idea.body.strip():
-        parts.append(idea.body.strip())
+    body, empty = visible_body(idea, schema)
+    if body.strip():
+        parts.append(body.strip())
+    if empty:
+        escaped = empty_line(empty).replace("\\", "\\\\").replace("*", "\\*").replace("_", "\\_")
+        parts.append(f"*{escaped}*")
     return "\n\n".join(parts) + "\n"
 
 

@@ -20,7 +20,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from metapet import export, fields, ids, paths, schema, scoring, stages, sync, wizard
+from metapet import export, fields, ids, paths, schema, scoring, stages, sync, views, wizard
 from metapet import review as review_
 from metapet.model import Idea, Status, clean_title, is_long_title, short_title
 from metapet.prompter import Prompter
@@ -334,12 +334,14 @@ def _stars(value: int) -> str:
     return f"{'★' * value}{'☆' * (5 - value)}"
 
 
-def _print_idea(idea: Idea) -> None:
-    meta = [f"{_status(idea.status)}  [dim]created {idea.created}[/]"]
+def _print_idea(idea: Idea, idea_schema: Schema) -> None:
+    console.print(Text(idea.title, style="bold"))
+    first = f"{escape(idea.id)} · {_status(idea.status)} · [dim]created {idea.created}[/]"
     if idea.updated:
-        meta[0] += f" [dim]· updated {idea.updated}[/]"
+        first += f" [dim]· updated {idea.updated}[/]"
     if idea.reviewed:
-        meta[0] += f" [dim]· reviewed {idea.reviewed}[/]"
+        first += f" [dim]· reviewed {idea.reviewed}[/]"
+    meta = [first]
     details = []
     if idea.excitement:
         details.append(f"excitement {_stars(idea.excitement)}")
@@ -357,16 +359,12 @@ def _print_idea(idea: Idea) -> None:
         meta.append("related " + escape(", ".join(idea.related)))
     if idea.shelved_reason:
         meta.append(f"[dim]shelved: {escape(idea.shelved_reason)}[/]")
-    console.print(
-        Panel(
-            "\n".join(meta),
-            title=f"[bold]{escape(idea.title)}[/]",
-            subtitle=escape(idea.id),
-            expand=False,
-        )
-    )
-    if idea.body.strip():
-        console.print(Markdown(idea.body))
+    console.print(Panel("\n".join(meta), expand=False))
+    body, empty = views.visible_body(idea, idea_schema)
+    if body.strip():
+        console.print(Markdown(body))
+    if empty:
+        console.print(Text(views.empty_line(empty), style="dim"))
 
 
 def _cut(text: str, width: int) -> str:
@@ -646,7 +644,7 @@ def list_ideas(
 @app.command()
 def show(ctx: typer.Context, idea_id: IdArg) -> None:
     """Show one idea."""
-    _print_idea(_find(_store(ctx), idea_id))
+    _print_idea(_find(_store(ctx), idea_id), _schema(ctx))
 
 
 @app.command()
@@ -965,7 +963,7 @@ def random_(ctx: typer.Context) -> None:
     if not pool:
         console.print("[dim]No seeds or sketches to resurface.[/]")
         return
-    _print_idea(random.choice(pool))
+    _print_idea(random.choice(pool), _schema(ctx))
 
 
 @app.command()
