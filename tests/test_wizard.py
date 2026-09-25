@@ -4,7 +4,7 @@ import pytest
 
 from metapet import fields, schema, stages, wizard
 from metapet.model import Idea, Status
-from metapet.prompter import ScriptedPrompter
+from metapet.prompter import PartialAnswer, ScriptedPrompter
 
 S = schema.builtin()
 TODAY = dt.date(2026, 1, 2)
@@ -285,3 +285,21 @@ def test_duplicate_name_can_be_cancelled(store):
     s, p = session(store, ["budget tracker", True])
     s.same_title, s.exists = store.same_title, store.exists
     assert wizard.ask_name(s).id == "budget-tracker-2"
+
+
+def test_partial_list_is_saved_on_ctrl_c(store):
+    idea = sketch_idea(store)
+    stages.move(idea, Status.SPEC, S)
+    store.save(idea)
+    s, _ = session(store, [PartialAnswer(["a", "b"])])
+    with pytest.raises(KeyboardInterrupt):
+        wizard.ask_field(s, idea, S.field("features"))
+    assert "## Features\n- a\n- b" in on_disk(store, idea).body
+
+
+def test_partial_dated_list_gets_dates(store):
+    idea = store.create("Budget tracker")
+    s, _ = session(store, [PartialAnswer(["one"])])
+    with pytest.raises(KeyboardInterrupt):
+        wizard.ask_field(s, idea, S.field("notes"))
+    assert "- 2026-01-02: one" in on_disk(store, idea).body

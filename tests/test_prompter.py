@@ -6,12 +6,13 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from rich.console import Console
 
-from metapet.prompter import ScriptedPrompter
+from metapet.prompter import PartialAnswer, ScriptedPrompter
 from metapet.questionary_prompter import QuestionaryPrompter, TagCompleter, resolve_long
 from metapet.views import Card
 
 DOWN = "j"  # questionary select also moves down with j
 ENTER = "\r"
+CTRL_C = "\x03"
 
 
 def test_scripted_prompter_pops_answers_and_records_calls():
@@ -88,3 +89,12 @@ def test_items_dropping_all_and_adding_none_is_a_skip():
     assert ask("n" + ENTER, "items", "Features?", current=["a", "b"]) is None
     assert ask("y" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["a", "c"]
     assert ask("n" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["c"]
+
+
+def test_items_ctrl_c_keeps_the_items_entered():
+    with pytest.raises(PartialAnswer) as exc:
+        ask("a" + ENTER + "b" + ENTER + CTRL_C, "items", "Features?", current=[])
+    assert exc.value.value == ["a", "b"]
+    with pytest.raises(KeyboardInterrupt) as exc:
+        ask(CTRL_C, "items", "Features?", current=[])
+    assert not isinstance(exc.value, PartialAnswer)

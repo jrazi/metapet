@@ -16,6 +16,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
 
+from metapet.prompter import PartialAnswer
 from metapet.views import Card
 
 SKIP = "Skip"
@@ -111,9 +112,15 @@ class QuestionaryPrompter:
             keep = questionary.confirm(f"Keep these {len(current)} items?", default=True, **self.io)
             if _ask(keep):
                 result = list(current)
+        kept = len(result)
         while True:
             prompt = f"  item {len(result) + 1} (Enter to finish)"
-            item = _ask(questionary.text(prompt, qmark="", **self.io)).strip()
+            try:
+                item = _ask(questionary.text(prompt, qmark="", **self.io)).strip()
+            except KeyboardInterrupt:
+                if len(result) > kept:
+                    raise PartialAnswer(result) from None
+                raise
             if not item:
                 break
             result.append(item)

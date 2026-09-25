@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from metapet import fields, ids, stages, views
 from metapet.model import Idea, Status, clean_title, is_long_title, short_title
-from metapet.prompter import Prompter
+from metapet.prompter import PartialAnswer, Prompter
 from metapet.schema import LIFECYCLE, Field, Kind, Schema, Storage
 
 TITLE_QUESTION = "Short name for the idea"
@@ -74,11 +74,12 @@ def _ask(s: Session, idea: Idea, f: Field) -> fields.Value:
         return p.long(f.question, hint=f.hint, current=current or "")
     if f.kind == Kind.LIST:
         existing = list(current or [])
-        answer = p.items(f.question, hint=f.hint, current=existing)
-        if answer is not None and f.dated:
-            prefix = f"{s.today.isoformat()}: "
-            answer = [item if item in existing else prefix + item for item in answer]
-        return answer
+        try:
+            answer = p.items(f.question, hint=f.hint, current=existing)
+        except PartialAnswer as exc:
+            exc.value = _dated(s, f, existing, exc.value)
+            raise
+        return _dated(s, f, existing, answer)
     if f.kind == Kind.SCALE:
         return p.scale(f.question, hint=f.hint, default=current)
     if f.kind == Kind.CHOICE:
@@ -87,6 +88,14 @@ def _ask(s: Session, idea: Idea, f: Field) -> fields.Value:
         return p.tags(f.question, hint=f.hint, current=list(current or []), known=s.known_tags)
     answer = p.text(f.question, hint=f.hint, default=str(current or ""))
     return (answer or "").strip() or None
+
+
+def _dated(s: Session, f: Field, existing: list[str], answer: list[str] | None):
+    """For a dated list, today's date before each new item."""
+    if answer is None or not f.dated:
+        return answer
+    prefix = f"{s.today.isoformat()}: "
+    return [item if item in existing else prefix + item for item in answer]
 
 
 def _only_adds(f: Field, current: fields.Value, value: fields.Value) -> bool:
@@ -102,8 +111,19 @@ def _only_adds(f: Field, current: fields.Value, value: fields.Value) -> bool:
 
 
 def ask_field(s: Session, idea: Idea, f: Field) -> bool:
-    """Ask one field; when the answer changes it, store it, touch the idea and save."""
-    value = _ask(s, idea, f)
+    """Ask one field; when the answer changes it, store it, touch the idea and save.
+
+    Ctrl-C in a list question keeps the items entered so far, then stops.
+    """
+    try:
+        value = _ask(s, idea, f)
+    except PartialAnswer as exc:
+        _store(s, idea, f, exc.value)
+        raise KeyboardInterrupt from None
+    return _store(s, idea, f, value)
+
+
+def _store(s: Session, idea: Idea, f: Field, value: fields.Value) -> bool:
     current = fields.get(idea, f)
     if value is None or value == [] or value == current:
         return False

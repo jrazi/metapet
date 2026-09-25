@@ -1,7 +1,8 @@
 """The questions interface used by the wizards, and a scripted version for tests.
 
 Every method that asks something returns None when the user skips the question; the wizard
-then keeps the current value. Ctrl-C raises KeyboardInterrupt.
+then keeps the current value. Ctrl-C raises KeyboardInterrupt, or PartialAnswer when a list
+question already has new items.
 """
 
 from __future__ import annotations
@@ -9,6 +10,14 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from metapet.views import Card
+
+
+class PartialAnswer(KeyboardInterrupt):
+    """Ctrl-C during a list question after some items were entered; `value` holds the list."""
+
+    def __init__(self, value: list[str]):
+        super().__init__()
+        self.value = value
 
 
 class Prompter(Protocol):
