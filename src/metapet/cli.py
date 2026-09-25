@@ -82,7 +82,7 @@ def _status(status: Status) -> str:
 
 def _ideas_table(ideas: list[Idea], extra: dict[str, list[str]] | None = None) -> Table:
     table = Table(box=None, header_style="bold", pad_edge=False)
-    table.add_column("id", style="bold")
+    table.add_column("id", style="bold", no_wrap=True, min_width=max(len(i.id) for i in ideas))
     table.add_column("title")
     table.add_column("status")
     table.add_column("exc", justify="right")
