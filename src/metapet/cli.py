@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from pathlib import Path
 from typing import Annotated
 
 import click
@@ -13,7 +14,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from metapet import paths, scoring, stages
+from metapet import export, paths, scoring, stages, sync
 from metapet.model import Effort, Idea, Status
 from metapet.store import IdeaLookupError, Store
 
@@ -139,6 +140,12 @@ def init(
     local: Annotated[
         bool, typer.Option("--local", help="Store ideas in ./data inside this checkout.")
     ] = False,
+    git: Annotated[
+        bool, typer.Option("--git", help="Make the store a git repo, for `pet sync` backups.")
+    ] = False,
+    remote: Annotated[
+        str | None, typer.Option("--remote", help="Git remote URL for backups (implies --git).")
+    ] = None,
 ) -> None:
     """Create the idea store."""
     home: paths.DataHome = ctx.obj
@@ -153,6 +160,13 @@ def init(
     store.init()
     verb = "Using existing" if already else "Created"
     console.print(f"{verb} idea store at [bold]{home.path}[/] [dim]({home.source})[/]")
+    if git or remote:
+        try:
+            sync.init_repo(home.path, remote)
+        except sync.SyncError as exc:
+            _fail(str(exc))
+        target = f" → {remote}" if remote else ""
+        console.print(f"Git backup enabled{target}; run [bold]pet sync[/] to back up.")
 
 
 @app.command()
@@ -386,3 +400,37 @@ def check(ctx: typer.Context) -> None:
     if broken:
         raise typer.Exit(1)
     console.print(f"[green]✓[/] {len(ideas)} ideas OK")
+
+
+# -- backup & export ---------------------------------------------------------
+
+
+@app.command("sync")
+def sync_(
+    ctx: typer.Context,
+    message: Annotated[str | None, typer.Option("--message", "-m", help="Commit message.")] = None,
+) -> None:
+    """Back up the store: commit, pull --rebase, push (if it's a git repo)."""
+    store = _store(ctx)
+    try:
+        steps = sync.sync(store.home.path, message)
+    except sync.SyncError as exc:
+        _fail(str(exc))
+    for step in steps:
+        console.print(f"[green]•[/] {step}")
+
+
+@app.command("export")
+def export_(
+    ctx: typer.Context,
+    md: Annotated[Path | None, typer.Option("--md", help="Write a Markdown index here.")] = None,
+    json_: Annotated[Path | None, typer.Option("--json", help="Write a JSON dump here.")] = None,
+) -> None:
+    """Export all ideas as a Markdown index and/or JSON."""
+    if not md and not json_:
+        _fail("pass --md FILE and/or --json FILE")
+    ideas = _store(ctx).all()
+    for target, render in ((md, export.to_markdown), (json_, export.to_json)):
+        if target:
+            target.write_text(render(ideas), encoding="utf-8")
+            console.print(f"[green]✓[/] wrote {target}")
