@@ -944,6 +944,10 @@ def search(ctx: typer.Context, text: Annotated[str, typer.Argument()]) -> None:
     _print_ideas(hits)
 
 
+app.command("list", hidden=True)(list_ideas)
+app.command("find", hidden=True)(search)
+
+
 @app.command("next")
 def next_(
     ctx: typer.Context,

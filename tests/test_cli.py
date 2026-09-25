@@ -671,3 +671,14 @@ def test_completion_falls_back_to_fragments(home):
     assert [i for i, _ in cli._complete_ids(FakeContext(home), "خانگی")] == ["dashboard"]
     assert [i for i, _ in cli._complete_ids(FakeContext(home), "bot")] == ["telegram-bot"]
     assert [i for i, _ in cli._complete_ids(FakeContext(home), "tel")] == ["telegram-bot"]
+
+
+def test_list_and_find_aliases(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    assert pet(home, "list").output == pet(home, "ls").output
+    assert pet(home, "find", "budget").output == pet(home, "search", "budget").output
+    assert "budget-tracker" in pet(home, "find", "budget").output
+    help_text = runner.invoke(app, ["--help"], env={"COLUMNS": "200"}).output
+    assert "│ list " not in help_text and "│ find " not in help_text
+    assert "│ ls " in help_text
