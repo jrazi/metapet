@@ -174,7 +174,9 @@ def _unique(s: Session, base: str) -> str:
 def ask_id(s: Session, suggested: str) -> str:
     """Ask for an id until the answer is valid and not in use."""
     while True:
-        answer = s.prompter.text(ID_QUESTION, hint=ID_HINT, default=suggested) or suggested
+        # The suggestion is not typed into the answer: text typed there would be added to it.
+        hint = f"{ID_HINT} Press Enter to use: {suggested}"
+        answer = s.prompter.text(ID_QUESTION, hint=hint) or suggested
         try:
             idea_id = ids.validate(answer)
         except ValueError as exc:
@@ -197,13 +199,9 @@ def ask_name(
     extra = None
     if is_long_title(title) and s.prompter.confirm(LONG_TITLE_QUESTION, default=True):
         extra = title
-        while True:
-            answer = s.prompter.text(TITLE_QUESTION, default=short_title(title))
-            short = " ".join((answer or "").split())
-            if short:
-                title = short
-                break
-            s.prompter.message("A name is needed (Ctrl-C to cancel).")
+        suggestion = short_title(title)
+        answer = s.prompter.text(TITLE_QUESTION, hint=f"Press Enter to use: {suggestion}")
+        title = " ".join((answer or "").split()) or suggestion
     same = s.same_title(title)
     if same:
         listed = ", ".join(f"{idea.id} ({idea.status.value})" for idea in same)

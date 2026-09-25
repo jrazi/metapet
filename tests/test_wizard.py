@@ -259,8 +259,17 @@ def test_long_title_moves_to_summary_and_asks_short_name(store):
     name = wizard.ask_name(s)
     assert name == wizard.Name("Downloads tidier", PARAGRAPH, "downloads-tidier")
     assert p.calls[1][1].startswith("That is long for a name.")
-    assert p.calls[2][2]["default"] == "A safe, reversible CLI that turns a messy"
+    # The suggestion is only shown: typing replaces it instead of being added to it.
+    assert p.calls[2][2]["default"] == ""
+    assert p.calls[2][2]["hint"] == "Press Enter to use: A safe, reversible CLI that turns a messy"
     assert len(p.calls) == 3  # no id question: the id is exact
+
+
+def test_enter_at_short_name_uses_the_suggestion(store):
+    s, _ = session(store, [PARAGRAPH, True, None, None])
+    name = wizard.ask_name(s)
+    assert name.title == "A safe, reversible CLI that turns a messy"
+    assert name.extra_summary == PARAGRAPH
 
 
 def test_long_title_kept_when_user_says_no(store):
@@ -269,7 +278,8 @@ def test_long_title_kept_when_user_says_no(store):
     assert name.title == " ".join(PARAGRAPH.split()) and name.extra_summary is None
     method, question, kwargs = p.calls[2]
     assert (method, question) == ("text", "Id")
-    assert kwargs["default"] == "safe-reversible-cli-that-turns-a-messy"
+    assert kwargs["default"] == ""
+    assert kwargs["hint"].endswith("Press Enter to use: safe-reversible-cli-that-turns-a-messy")
     assert name.id == "safe-reversible-cli-that-turns-a-messy"
 
 
@@ -279,8 +289,8 @@ def test_non_latin_title_asks_for_id(store):
     s.exists = store.exists
     name = wizard.ask_name(s)
     assert name.id == "weather-bot"
-    assert [kwargs["default"] for m, q, kwargs in p.calls if q == "Id"][0] == (
-        "telegram-bot-dlya-pogody"
+    assert [kwargs["hint"] for m, q, kwargs in p.calls if q == "Id"][0].endswith(
+        "Press Enter to use: telegram-bot-dlya-pogody"
     )
     assert p.messages[0].startswith("An id uses lowercase letters")
     assert p.messages[1] == "An idea with id 'taken' already exists."
