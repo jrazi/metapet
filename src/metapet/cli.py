@@ -734,7 +734,7 @@ def _join_summary(summary: str | None, extra: str) -> str:
 def _shorten_long_title(title: str, summary: str | None, keep: bool) -> tuple[str, str | None]:
     """Without questions, a long title becomes a short one and the summary keeps the text."""
     title = clean_title(title)
-    if keep or not is_long_title(title):
+    if keep or not is_long_title(title, count_words=False):
         return title, summary
     short = short_title(title)
     err.print(

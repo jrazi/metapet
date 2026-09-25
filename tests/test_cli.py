@@ -566,6 +566,14 @@ def test_add_long_title_is_shortened(home):
     assert LONG in text
 
 
+def test_add_keeps_a_many_word_title_that_is_not_long(home):
+    pet(home, "init")
+    title = "Telegram bot that forwards RSS feeds to a channel"
+    result = pet(home, "add", title)
+    assert "note:" not in result.output
+    assert f"title: {title}\n" in idea_text(home, "telegram-bot-that-forwards-rss-feeds")
+
+
 def test_add_long_title_with_id_is_kept(home):
     pet(home, "init")
     assert pet(home, "add", LONG, "--id", "tidy").exit_code == 0

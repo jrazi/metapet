@@ -187,8 +187,8 @@ header: id, status, title, tags (comma separated), excitement, impact, effort, c
 then any extra column (score, last seen). For example, `pet ls | grep -c seed`.
 
 The title is a short name. When the title given to `add` or `new` is longer than 60
-characters or 8 words, its first words become the title and the full text is kept as
-the summary; in a terminal, `new` asks first. `add`, `new` and `promote` print the id;
+characters, its first words become the title and the full text is kept as the summary.
+In a terminal, `new` asks first, and also asks about titles of more than 8 words. `add`, `new` and `promote` print the id;
 `-v` also prints the path of the file (`pet where` shows the data directory).
 
 `new`, `add -i`, `promote`, `refine` and `review` ask questions only when run in a

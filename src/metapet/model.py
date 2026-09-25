@@ -83,10 +83,16 @@ STOP_WORDS = frozenset(
 )
 
 
-def is_long_title(text: str) -> bool:
-    """True for text that reads like a description rather than a name."""
+def is_long_title(text: str, count_words: bool = True) -> bool:
+    """True for text that reads like a description rather than a name.
+
+    With `count_words` off, only the length in characters counts; that is the rule when
+    a title is shortened without asking.
+    """
     title = " ".join(text.split())
-    return len(title) > LONG_TITLE_CHARS or len(title.split()) > LONG_TITLE_WORDS
+    if len(title) > LONG_TITLE_CHARS:
+        return True
+    return count_words and len(title.split()) > LONG_TITLE_WORDS
 
 
 def short_title(text: str) -> str:
