@@ -9,12 +9,18 @@ import datetime as dt
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from metapet import fields, stages, views
-from metapet.model import Idea, Status
+from metapet import fields, ids, stages, views
+from metapet.model import Idea, Status, clean_title, is_long_title, short_title
 from metapet.prompter import Prompter
 from metapet.schema import LIFECYCLE, Field, Kind, Schema, Storage
 
-TITLE_QUESTION = "What is the idea, in a few words?"
+TITLE_QUESTION = "Short name for the idea"
+TITLE_HINT = "A few words, like Plant watering bot. The id is made from it."
+LONG_TITLE_QUESTION = (
+    "That is long for a name. Keep the full text as the summary and choose a shorter name?"
+)
+ID_QUESTION = "Id"
+ID_HINT = "Lowercase letters, digits and hyphens. It is what you type in commands."
 # Stages the continuation after `new` offers to move on to.
 CONTINUE_TO = (Status.SKETCH, Status.SPEC, Status.BUILDING)
 
@@ -28,6 +34,16 @@ class Session:
     today: dt.date = field(default_factory=dt.date.today)
     last_card: views.Card | None = None
     started: bool = False
+    exists: Callable[[str], bool] = lambda _: False  # whether an idea id is taken
+
+
+@dataclass(frozen=True)
+class Name:
+    """What ask_name found out: the title, text to add to the summary, and the id."""
+
+    title: str
+    extra_summary: str | None
+    id: str
 
 
 def show_card(s: Session, idea: Idea) -> None:
@@ -111,14 +127,59 @@ def ask_fields(s: Session, idea: Idea, fields_to_ask: list[Field]) -> None:
 
 def ask_title(s: Session) -> str:
     try:
-        question = s.schema.field("title", labels=False).question
+        f = s.schema.field("title", labels=False)
+        question, hint = f.question, f.hint
     except KeyError:
-        question = TITLE_QUESTION
+        question, hint = TITLE_QUESTION, TITLE_HINT
     while True:
-        title = " ".join((s.prompter.text(question) or "").split())
+        title = " ".join((s.prompter.text(question, hint=hint) or "").split())
         if title:
             return title
-        s.prompter.message("A title is needed.")
+        s.prompter.message("A name is needed (Ctrl-C to cancel).")
+
+
+def _unique(s: Session, base: str) -> str:
+    candidate, n = base, 2
+    while s.exists(candidate):
+        candidate, n = ids.with_suffix(base, n), n + 1
+    return candidate
+
+
+def ask_id(s: Session, suggested: str) -> str:
+    """Ask for an id until the answer is valid and not in use."""
+    while True:
+        answer = s.prompter.text(ID_QUESTION, hint=ID_HINT, default=suggested) or suggested
+        try:
+            idea_id = ids.validate(answer)
+        except ValueError as exc:
+            s.prompter.message(f"{str(exc).capitalize()}.")
+            continue
+        if s.exists(idea_id):
+            s.prompter.message(f"An idea with id '{idea_id}' already exists.")
+            continue
+        return idea_id
+
+
+def ask_name(
+    s: Session, supplied_title: str | None = None, supplied_id: str | None = None
+) -> Name:
+    """Ask for the title, a shorter one when it is long, and the id when it is not exact."""
+    title = clean_title(supplied_title) if supplied_title else ask_title(s)
+    extra = None
+    if is_long_title(title) and s.prompter.confirm(LONG_TITLE_QUESTION, default=True):
+        extra = title
+        while True:
+            answer = s.prompter.text(TITLE_QUESTION, default=short_title(title))
+            short = " ".join((answer or "").split())
+            if short:
+                title = short
+                break
+            s.prompter.message("A name is needed (Ctrl-C to cancel).")
+    if supplied_id is not None:
+        return Name(title, extra, supplied_id)
+    suggestion = ids.suggest(title, s.today)
+    unique = _unique(s, suggestion.id)
+    return Name(title, extra, unique if suggestion.exact else ask_id(s, unique))
 
 
 def new_idea(s: Session, idea: Idea, supplied: set[str]) -> None:

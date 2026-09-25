@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -63,6 +64,45 @@ REQUIRED_KEYS = ("id", "title", "status", "created")
 
 class IdeaError(ValueError):
     """Raised when an idea file cannot be parsed into a valid idea."""
+
+
+LONG_TITLE_CHARS = 60
+LONG_TITLE_WORDS = 8
+_CLAUSE_END = re.compile(r"[.,:;!?(—–]")
+_TRAILING_PUNCTUATION = " \t.,:;!?()—–-\"'"
+# Words a short title should not end with.
+STOP_WORDS = frozenset(
+    ("a", "an", "the", "and", "or", "of", "for", "to", "with", "that", "in", "on", "by", "from")
+)
+
+
+def is_long_title(text: str) -> bool:
+    """True for text that reads like a description rather than a name."""
+    title = " ".join(text.split())
+    return len(title) > LONG_TITLE_CHARS or len(title.split()) > LONG_TITLE_WORDS
+
+
+def short_title(text: str) -> str:
+    """A name made from the start of a longer text, cut at whole words."""
+    text = " ".join(text.split())
+    clause = _CLAUSE_END.split(text, maxsplit=1)[0].split()
+    if 3 <= len(clause) <= LONG_TITLE_WORDS:
+        words = clause
+    else:
+        words = []
+        for word in text.split()[:LONG_TITLE_WORDS]:
+            if len(" ".join([*words, word])) > LONG_TITLE_CHARS:
+                break
+            words.append(word)
+        if not words:
+            words = [text[:LONG_TITLE_CHARS]]
+    while True:
+        words[-1] = words[-1].rstrip(_TRAILING_PUNCTUATION)
+        if len(words) > 1 and (not words[-1] or words[-1].casefold() in STOP_WORDS):
+            words.pop()
+            continue
+        break
+    return " ".join(words).strip() or text[:LONG_TITLE_CHARS]
 
 
 def clean_title(text: str) -> str:

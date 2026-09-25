@@ -181,7 +181,54 @@ def test_refine_one_field(store):
 def test_ask_title_repeats_until_given(store):
     s, p = session(store, ["", "  ", "Budget tracker"])
     assert wizard.ask_title(s) == "Budget tracker"
-    assert p.messages == ["A title is needed.", "A title is needed."]
+    assert p.messages == ["A name is needed (Ctrl-C to cancel)."] * 2
+
+
+PARAGRAPH = (
+    "A safe, reversible CLI that turns a messy folder of downloaded files into a clean, "
+    "organized library: it detects duplicates, groups by type and date, suggests names, and "
+    "shows a dry-run plan before touching anything."
+)
+
+
+def test_title_question_has_hint(store):
+    s, p = session(store, ["Budget tracker"])
+    wizard.ask_name(s)
+    method, question, kwargs = p.calls[0]
+    assert (method, question) == ("text", "Short name for the idea")
+    assert kwargs["hint"] == "A few words, like Plant watering bot. The id is made from it."
+
+
+def test_long_title_moves_to_summary_and_asks_short_name(store):
+    s, p = session(store, [PARAGRAPH, True, "Downloads tidier"])
+    name = wizard.ask_name(s)
+    assert name == wizard.Name("Downloads tidier", PARAGRAPH, "downloads-tidier")
+    assert p.calls[1][1].startswith("That is long for a name.")
+    assert p.calls[2][2]["default"] == "A safe, reversible CLI that turns a messy"
+    assert len(p.calls) == 3  # no id question: the id is exact
+
+
+def test_long_title_kept_when_user_says_no(store):
+    s, p = session(store, [PARAGRAPH, False, None])
+    name = wizard.ask_name(s)
+    assert name.title == " ".join(PARAGRAPH.split()) and name.extra_summary is None
+    method, question, kwargs = p.calls[2]
+    assert (method, question) == ("text", "Id")
+    assert kwargs["default"] == "safe-reversible-cli-that-turns-a-messy"
+    assert name.id == "safe-reversible-cli-that-turns-a-messy"
+
+
+def test_non_latin_title_asks_for_id(store):
+    store.create("Taken", id="taken")
+    s, p = session(store, ["Телеграм бот для погоды", "Weather Bot", "taken", "weather-bot"])
+    s.exists = store.exists
+    name = wizard.ask_name(s)
+    assert name.id == "weather-bot"
+    assert [kwargs["default"] for m, q, kwargs in p.calls if q == "Id"][0] == (
+        "telegram-bot-dlya-pogody"
+    )
+    assert p.messages[0].startswith("An id uses lowercase letters")
+    assert p.messages[1] == "An idea with id 'taken' already exists."
 
 
 def test_empty_list_answer_keeps_the_items(store):

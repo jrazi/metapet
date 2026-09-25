@@ -246,7 +246,13 @@ class PetApp(App[None]):
             return None
 
     def session(self) -> wizard.Session:
-        return wizard.Session(self.schema, self.prompter(), self.store.save, self.store.all_tags())
+        return wizard.Session(
+            self.schema,
+            self.prompter(),
+            self.store.save,
+            self.store.all_tags(),
+            exists=self.store.exists,
+        )
 
     # -- events ------------------------------------------------------------------
 
@@ -351,8 +357,8 @@ class PetApp(App[None]):
 
         def fn() -> None:
             s = self.session()
-            title = wizard.ask_title(s)
-            idea = self.store.create(title)
+            name = wizard.ask_name(s)
+            idea = self.store.create(name.title, id=name.id, body=name.extra_summary or "")
             created.append(idea.id)
             wizard.new_idea(s, idea, {"title"})
             wizard.continue_stages(s, idea)

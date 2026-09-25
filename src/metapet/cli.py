@@ -21,7 +21,7 @@ from rich.text import Text
 
 from metapet import export, fields, ids, paths, schema, scoring, stages, sync, wizard
 from metapet import review as review_
-from metapet.model import Idea, Status, clean_title
+from metapet.model import Idea, Status, clean_title, is_long_title, short_title
 from metapet.prompter import Prompter
 from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import IdeaLookupError, Store
@@ -151,7 +151,9 @@ def _prompter() -> Prompter:
 
 
 def _session(store: Store, idea_schema: Schema) -> wizard.Session:
-    return wizard.Session(idea_schema, _prompter(), store.save, store.all_tags())
+    return wizard.Session(
+        idea_schema, _prompter(), store.save, store.all_tags(), exists=store.exists
+    )
 
 
 @contextmanager
@@ -183,6 +185,8 @@ def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     matches = [i for i in ideas if i.id.startswith(incomplete.lower())]
     return [(idea.id, idea.title) for idea in sorted(matches, key=lambda i: i.id)]
 
+
+TITLE_HELP = "Short name for the idea, a few words (the id is made from it)."
 
 IdOption = Annotated[
     str | None,
@@ -337,7 +341,7 @@ def where(ctx: typer.Context) -> None:
 @app.command()
 def add(
     ctx: typer.Context,
-    title: Annotated[str, typer.Argument(help="The idea, in a few words.")],
+    title: Annotated[str, typer.Argument(metavar="TITLE", help=TITLE_HELP)],
     tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Tag (repeatable).")] = None,
     note: Annotated[str | None, typer.Option("--note", "-m", help="One-line description.")] = None,
     interactive: Annotated[
@@ -355,7 +359,7 @@ def add(
     store = _store(ctx)
     idea_schema = _schema(ctx) if interactive else None
     try:
-        clean_title(title)
+        title, note = _shorten_long_title(title, note, id_ is not None)
     except ValueError:
         _fail('a title is required: pet add "TITLE"')
     try:
@@ -388,7 +392,7 @@ def _summary_key(idea_schema: Schema) -> str:
 @app.command()
 def new(
     ctx: typer.Context,
-    title: Annotated[str | None, typer.Argument(help="The idea, in a few words.")] = None,
+    title: Annotated[str | None, typer.Argument(metavar="[TITLE]", help=TITLE_HELP)] = None,
     summary: Annotated[
         str | None, typer.Option("--summary", "-m", help="Describe it in one sentence.")
     ] = None,
@@ -421,19 +425,12 @@ def new(
             id_ = store.check_new_id(id_)
         except ValueError as exc:
             _fail(escape(str(exc)))
-    interactive = _interactive(no_input)
-    session = _session(store, idea_schema) if interactive else None
-    if not title or not title.strip():
-        if session is None:
-            _fail('a title is required: pet new "TITLE"')
-        with _stoppable():
-            title = wizard.ask_title(session)
+    summary_key = _summary_key(idea_schema)
     flagged = {
-        _summary_key(idea_schema): summary,
+        summary_key: summary,
         "tags": ",".join(tag) if tag else None,
         "excitement": excitement,
     }
-    tokens = [f"{key}={value}" for key, value in flagged.items() if value is not None]
     try:
         extra = fields.parse_changes(list(set_ or []))
         clashes = [
@@ -444,11 +441,24 @@ def new(
         ]
         if clashes:
             raise ValueError(f"'{clashes[0]}' is given both as a flag and with --set")
-        title = clean_title(title)
-        idea = Idea(id=id_ or store.unique_id(title), title=title)
-        fields.apply_changes(idea, idea_schema, fields.parse_changes(tokens) + extra)
+        # Check every value before asking anything.
+        fields.apply_changes(Idea(id="x", title="x"), idea_schema, _changes(flagged) + extra)
     except ValueError as exc:
         _fail(escape(str(exc)))
+    session = _session(store, idea_schema) if _interactive(no_input) else None
+    if session is None:
+        if not title or not title.strip():
+            _fail('a title is required: pet new "TITLE"')
+        title, flagged[summary_key] = _shorten_long_title(title, summary, id_ is not None)
+        idea_id = id_ or store.unique_id(title)
+    else:
+        with _stoppable():
+            name = wizard.ask_name(session, title if title and title.strip() else None, id_)
+        title, idea_id = name.title, name.id
+        if name.extra_summary:
+            flagged[summary_key] = _join_summary(summary, name.extra_summary)
+    idea = Idea(id=idea_id, title=clean_title(title))
+    fields.apply_changes(idea, idea_schema, _changes(flagged) + extra)
     idea.updated = None  # just created
     store.save(idea)
     console.print(f"[green]+[/] {escape(idea.id)}  [dim]{escape(str(idea.path))}[/]", soft_wrap=True)
@@ -459,6 +469,29 @@ def new(
     with _stoppable():
         wizard.new_idea(session, idea, supplied)
         wizard.continue_stages(session, idea)
+
+
+def _changes(flagged: dict[str, str | None]) -> list[fields.Change]:
+    return [fields.Change("set", key, value) for key, value in flagged.items() if value is not None]
+
+
+def _join_summary(summary: str | None, extra: str) -> str:
+    """The summary with extra text added as another paragraph."""
+    return f"{summary.strip()}\n\n{extra}" if summary and summary.strip() else extra
+
+
+def _shorten_long_title(title: str, summary: str | None, keep: bool) -> tuple[str, str | None]:
+    """Without questions, a long title becomes a short one and the summary keeps the text."""
+    title = clean_title(title)
+    if keep or not is_long_title(title):
+        return title, summary
+    short = short_title(title)
+    err.print(
+        f'note: the title was long; kept "{escape(short)}" as the title and the full text as '
+        "the summary",
+        soft_wrap=True,
+    )
+    return short, _join_summary(summary, title)
 
 
 # -- browsing ----------------------------------------------------------------

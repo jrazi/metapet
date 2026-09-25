@@ -95,8 +95,8 @@ def test_long_paths_are_never_wrapped(home, monkeypatch):
     monkeypatch.setattr(cli.console, "width", 20)
     pet(home, "init")
     assert pet(home, "where").output.startswith(str(home.path))
-    added = pet(home, "add", "A very long idea title that makes a long path").output
-    assert str(home.ideas / "a-very-long-idea-title-that-makes-a-long-path.md") in added
+    added = pet(home, "add", "Long idea title that makes a long path").output
+    assert str(home.ideas / "long-idea-title-that-makes-a-long-path.md") in added
 
 
 def complete(home, words):
@@ -288,7 +288,7 @@ def test_new_asks_questions_in_a_terminal(home, monkeypatch):
     result = pet(home, "new", "-t", "money")
     assert result.exit_code == 0, result.output
     assert "budget-tracker" in result.output
-    assert prompter.messages[0] == "A title is needed."
+    assert prompter.messages[0] == "A name is needed (Ctrl-C to cancel)."
     methods = [method for method, _, _ in prompter.calls]
     assert methods == ["text", "text", "text", "scale", "confirm"]  # tags were given
     text = idea_text(home, "budget-tracker")
@@ -499,3 +499,39 @@ def test_set_id_points_to_rename(home):
     result = pet(home, "set", "garden", "id=x")
     assert result.exit_code == 1
     assert "use pet rename ID NEW_ID to change the id" in result.output
+
+
+LONG = (
+    "A safe, reversible CLI that turns a messy folder of downloaded files into a clean, "
+    "organized library: it detects duplicates and shows a dry-run plan first."
+)
+
+
+def test_add_long_title_is_shortened(home):
+    pet(home, "init")
+    result = pet(home, "add", LONG)
+    assert result.exit_code == 0, result.output
+    assert 'note: the title was long; kept "A safe, reversible CLI that turns a messy"' in (
+        result.output
+    )
+    idea_id = "safe-reversible-cli-that-turns-a-messy"
+    text = idea_text(home, idea_id)
+    assert "title: A safe, reversible CLI that turns a messy\n" in text
+    assert LONG in text
+
+
+def test_add_long_title_with_id_is_kept(home):
+    pet(home, "init")
+    assert pet(home, "add", LONG, "--id", "tidy").exit_code == 0
+    assert "note:" not in pet(home, "show", "tidy").output
+    assert "organized library" in idea_text(home, "tidy").split("---")[1]
+
+
+def test_new_long_title_in_a_terminal_goes_to_summary(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, [LONG, True, "Downloads tidier", None, None, False])
+    result = pet(home, "new", "-m", "First line.")
+    assert result.exit_code == 0, result.output
+    text = idea_text(home, "downloads-tidier")
+    assert "title: Downloads tidier" in text
+    assert f"First line.\n\n{LONG}" in text

@@ -13,14 +13,12 @@ from dataclasses import dataclass
 
 from anyascii import anyascii
 
+from metapet.model import STOP_WORDS
+
 ID_MAX = 40
 ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 ID_RULE = "an id uses lowercase letters, digits and single hyphens, up to 40 characters"
 LEADING_ARTICLES = {"a", "an", "the"}
-STOP_WORDS = {
-    *("a", "an", "the", "and", "or", "of", "for", "to"),
-    *("with", "that", "in", "on", "by", "from"),
-}
 _SHARP = re.compile(r"(?<=[^\W\d_])#")
 _WORD_SPLIT = re.compile(r"[^a-z0-9]+")
 
