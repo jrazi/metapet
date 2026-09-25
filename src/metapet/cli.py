@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import click
 import typer
@@ -60,7 +60,7 @@ def _store(ctx: typer.Context, *, must_exist: bool = True) -> Store:
     return store
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     err.print(f"[red]error:[/] {message}")
     raise typer.Exit(1)
 
@@ -73,7 +73,6 @@ def _find(store: Store, query: str) -> Idea:
             ids = "\n".join(f"  • {i.id}  [dim]{i.title}[/]" for i in exc.candidates)
             _fail(f"{exc}; be more specific:\n{ids}")
         _fail(str(exc))
-        raise  # unreachable, keeps type checkers happy
 
 
 def _status(status: Status) -> str:
