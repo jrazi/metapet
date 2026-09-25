@@ -26,6 +26,7 @@ from rich.text import Text
 from typer.core import TyperArgument, TyperCommand
 
 from metapet import (
+    __version__,
     export,
     fields,
     ids,
@@ -161,6 +162,12 @@ STATUS_STYLE = {
 }
 
 
+def _show_version(value: bool) -> None:
+    if value:
+        typer.echo(f"pet {__version__}")
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -170,6 +177,12 @@ def main(
             "--home", metavar="PATH", help="Data directory to use (overrides $METAPET_HOME)."
         ),
     ] = None,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version", callback=_show_version, is_eager=True, help="Show the version and exit."
+        ),
+    ] = False,
 ) -> None:
     ctx.obj = paths.resolve(home)
     if ctx.invoked_subcommand is not None or ctx.resilient_parsing:

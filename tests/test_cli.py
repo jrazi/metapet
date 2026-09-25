@@ -19,6 +19,15 @@ def pet(home, *args, input=None):
     return result
 
 
+def test_version_option():
+    from metapet import __version__
+
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert result.output == f"pet {__version__}\n"
+    assert __version__ == "0.1.0"
+
+
 def test_commands_require_init(home):
     result = pet(home, "ls")
     assert result.exit_code == 1
