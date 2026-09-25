@@ -5,7 +5,7 @@ them from a one-line seed into a buildable spec.
 
 ```console
 $ pet add "Spotify downloader bot for Telegram" -t telegram -t bot
-+ spotify-downloader-bot-for-telegram
++ spotify-downloader-bot-for-telegram  Spotify downloader bot for Telegram
 $ pet promote spotify
 spotify-downloader-bot-for-telegram: seed → sketch
 $ pet next
@@ -30,8 +30,9 @@ pet --install-completion   # bash, zsh, fish or PowerShell; then open a new shel
 ```
 
 Completes commands, options and idea ids (`pet show sp<TAB>`); zsh and fish also
-show each idea's title. `pet --help` and `pet promote --help` explain the lifecycle
-and list each stage's fields.
+show each idea's title. When no id starts with what you typed, ideas whose id or title
+contain it are offered instead (bash and fish show these; zsh may not).
+`pet --help` and `pet promote --help` explain the lifecycle and list each stage's fields.
 
 ## Where ideas live
 
@@ -75,6 +76,18 @@ Only `id`, `title`, `status` and `created` are required. Optional fields are
 `updated`, `reviewed`, `tags`, `excitement`, `impact`, `effort`, `repo`, `related`
 and `shelved_reason`. Unknown keys are preserved.
 
+### Ids
+
+Each idea has an id, which is also its file name and what you type in commands.
+pet makes it from the title: lowercase letters, digits and hyphens, at most 40
+characters, cut at a whole word. Titles in other scripts are spelled in Latin letters
+(`Телеграм бот` becomes `telegram-bot`) so the id can be typed on any keyboard. You do
+not have to type the whole id: any unique prefix or fragment of the id or title works.
+
+Choose the id yourself with `pet add TITLE --id ID` (or `pet new --id ID`). Change it
+later with `pet rename ID NEW_ID`; without `NEW_ID` the id is made again from the
+current title. Other ideas that list the old id under `related` are updated.
+
 ### Lifecycle
 
 `seed → sketch → spec → building → shipped`, or `shelved` at any point.
@@ -97,12 +110,16 @@ an HTML comment, for each section field of the new stage. It never touches what 
 have already written and skips sections you already have. Every field can be left
 empty: if an expected field of an earlier stage is empty, promote warns and moves the
 idea anyway. In a terminal it first offers to fill those fields, then asks the
-questions of the new stage; any question can be skipped. `pet check` lists the empty
-expected fields of every idea.
+questions of the new stage that are still empty; any question can be skipped, and
+answered ones are changed with `pet refine`. Moving back (`--to` an earlier stage)
+adds and removes nothing. A shelved or shipped idea moved back with `--to STAGE` gets
+the sections of every stage up to STAGE, and an empty Retro section is removed.
+`pet check` lists the empty expected fields of every idea.
 
 Fill fields by answering questions with `pet refine ID`, with `pet set ID KEY=VALUE`,
-`pet note ID TEXT` or `pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name,
-ignoring case, so files written by older versions keep working.
+`pet note ID TEXT` or `pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name or key,
+ignoring case, so files written by older versions keep working. A `## ` heading typed
+inside a field's answer is changed to `### `, so it stays part of that field.
 
 ### Changing the stages
 
@@ -130,26 +147,30 @@ question = "How should it feel to use?"
 
 See [`src/metapet/stages.toml`](src/metapet/stages.toml) for the built-in file and
 every option (`kind`, `store`, `hint`, `choices`, `aliases`, `dated`). `pet stages`
-shows the stages and field keys in use, and `pet check` reports mistakes in your file. The old `templates/` folder is no longer used.
+shows the stages and field keys in use, and `pet check` reports mistakes in your file. Each field key can
+be used by one field only, and no two section fields can use the same heading (label,
+alias, or key with `_` read as a space). The old `templates/` folder is no longer used.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `pet init [--local] [--git] [--remote URL]` | Create the store, optionally as a git repo |
-| `pet add TITLE [-t TAG]… [-m NOTE] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
-| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
-| `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved) |
-| `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment |
+| `pet add TITLE [-t TAG]… [-m NOTE] [--id ID] [-v] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
+| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--id ID] [-v] [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
+| `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved); also `pet list` |
+| `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment. `pet edit` also opens a file that cannot be read, so it can be fixed |
 | `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
-| `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields; an empty value clears one |
+| `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields (by key or heading); an empty value clears one. For `notes` and `log`, each value adds a dated item |
 | `pet note ID TEXT` | Add a dated line to the Notes section |
-| `pet promote ID [--to STATUS] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
-| `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
-| `pet shelve ID REASON` | Park an idea, remembering why |
+| `pet rm ID [--yes]` | Delete an idea (asks first; outside a terminal pass `--yes`); also `pet delete` |
+| `pet rename ID [NEW_ID]` | Change an idea's id and file name; without `NEW_ID`, make it from the title |
+| `pet promote ID [--to STATUS] [-v] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
+| `pet refine ID [FIELD]` | Answer one field again, or pick fields from a list |
+| `pet shelve ID REASON` | Park an idea, remembering why (the reason is also added to Notes with the date) |
 | `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
 | `pet ui` · `pet` | Browse and change ideas in a full-screen view (bare `pet` outside a terminal prints help) |
-| `pet search TEXT` | Search titles, tags and bodies |
+| `pet search QUERY… [-a]` | Find ideas whose id, title, tags or text contain all the words; `status:NAME` and `tag:NAME` work as in the `pet ui` filter; `-a` includes shipped/shelved; also `pet find` |
 | `pet next [-n N]` | Suggest what to build next |
 | `pet random` | Resurface a forgotten seed or sketch |
 | `pet stats` | Counts by status, tag and month |
@@ -157,7 +178,19 @@ shows the stages and field keys in use, and `pet check` reports mistakes in your
 | `pet check` | Validate idea files and `stages.toml`; list empty expected fields |
 | `pet where` | Show the data directory in use |
 | `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |
-| `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump |
+| `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump; `-` as FILE writes to standard output |
+
+In a terminal, `ls`, `search`, `next` and `review` show a table with one line per idea;
+when the terminal is narrow, long titles are cut with `…` and the least important
+columns (created, effort, impact, tags, excitement) are left out. When the output goes
+to a pipe or a file, they print one tab-separated line per idea instead, with no
+header: id, status, title, tags (comma separated), excitement, impact, effort, created,
+then any extra column (score, last seen). For example, `pet ls | grep -c seed`.
+
+The title is a short name. When the title given to `add` or `new` is longer than 60
+characters, its first words become the title and the full text is kept as the summary.
+In a terminal, `new` asks first, and also asks about titles of more than 8 words. `add`, `new` and `promote` print the id;
+`-v` also prints the path of the file (`pet where` shows the data directory).
 
 `new`, `add -i`, `promote`, `refine` and `review` ask questions only when run in a
 terminal; `--no-input` turns the questions off, and outside a terminal they use only
@@ -182,20 +215,21 @@ same question is asked again. Outside a terminal it only lists the ideas.
 
 ### Full-screen view
 
-`pet ui`, or `pet` on its own in a terminal, opens a list of ideas with a preview of
-the selected one. Keys:
+`pet ui`, or `pet` on its own in a terminal, opens a list of ideas, newest first,
+with a preview of the selected one. The list shows each idea's title, status,
+excitement, impact and effort; the preview shows its id and details. Keys:
 
 | Key | Action |
 |---|---|
-| `/` | Filter: words, `status:spec`, `tag:cli` (Enter goes back to the list, Escape clears) |
+| `/` | Filter: words, `status:spec`, `tag:cli` (Enter goes back to the list; Escape, in the filter or the list, clears it) |
+| `q` | Quit |
 | `a` | Add an idea |
-| `p` | Promote to the next stage |
+| `p` | Promote to the next stage; on a shelved or shipped idea, choose a stage to move it back to |
 | `r` | Refine: pick fields to answer |
 | `n` | Add a note |
 | `s` | Shelve, with a reason |
 | `e` | Open the file in `$EDITOR` |
-| `x` | Set excitement (1-5) |
-| `q` | Quit |
+| `x` | Rate: set excitement (1-5) |
 
 Add, promote and refine ask the same questions as the commands of the same name;
 the view steps aside while they run and comes back afterwards. Shipped and shelved

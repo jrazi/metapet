@@ -1,7 +1,8 @@
 """The questions interface used by the wizards, and a scripted version for tests.
 
 Every method that asks something returns None when the user skips the question; the wizard
-then keeps the current value. Ctrl-C raises KeyboardInterrupt.
+then keeps the current value. Ctrl-C raises KeyboardInterrupt, or PartialAnswer when a list
+question already has new items.
 """
 
 from __future__ import annotations
@@ -9,6 +10,14 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from metapet.views import Card
+
+
+class PartialAnswer(KeyboardInterrupt):
+    """Ctrl-C during a list question after some items were entered; `value` holds the list."""
+
+    def __init__(self, value: list[str]):
+        super().__init__()
+        self.value = value
 
 
 class Prompter(Protocol):
@@ -21,7 +30,12 @@ class Prompter(Protocol):
     def long(self, question: str, *, hint: str | None = None, current: str = "") -> str | None: ...
 
     def items(
-        self, question: str, *, hint: str | None = None, current: list[str]
+        self,
+        question: str,
+        *,
+        hint: str | None = None,
+        current: list[str],
+        clear: str | None = None,
     ) -> list[str] | None: ...
 
     def scale(
@@ -41,7 +55,9 @@ class Prompter(Protocol):
         self, question: str, *, hint: str | None = None, current: list[str], known: list[str]
     ) -> list[str] | None: ...
 
-    def select(self, question: str, options: list[tuple[str, str]]) -> str: ...
+    def select(
+        self, question: str, options: list[tuple[str, str]], *, default: str | None = None
+    ) -> str: ...
 
     def confirm(self, question: str, *, default: bool = False) -> bool: ...
 
@@ -80,7 +96,12 @@ class ScriptedPrompter:
         return self._answer("long", question, hint=hint, current=current)
 
     def items(
-        self, question: str, *, hint: str | None = None, current: list[str]
+        self,
+        question: str,
+        *,
+        hint: str | None = None,
+        current: list[str],
+        clear: str | None = None,
     ) -> list[str] | None:
         return self._answer("items", question, hint=hint, current=current)
 
@@ -104,8 +125,10 @@ class ScriptedPrompter:
     ) -> list[str] | None:
         return self._answer("tags", question, hint=hint, current=current, known=known)
 
-    def select(self, question: str, options: list[tuple[str, str]]) -> str:
-        return self._answer("select", question, options=options)
+    def select(
+        self, question: str, options: list[tuple[str, str]], *, default: str | None = None
+    ) -> str:
+        return self._answer("select", question, options=options, default=default)
 
     def confirm(self, question: str, *, default: bool = False) -> bool:
         return self._answer("confirm", question, default=default)

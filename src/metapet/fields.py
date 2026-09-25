@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from metapet import sections
-from metapet.model import KNOWN_KEYS, Effort, Idea
+from metapet.model import KNOWN_KEYS, Effort, Idea, clean_title
 from metapet.schema import Field, Kind, Schema, Storage
 
 Value = str | int | list[str] | None
@@ -18,9 +18,10 @@ Order = Callable[[str], int | None]
 # Keys `set` refuses, with the reason.
 NOT_SETTABLE = {
     "status": "use pet promote or pet shelve to change the status",
+    "id": "use pet rename ID NEW_ID to change the id",
     **{
         key: f"'{key}' cannot be set"
-        for key in ("id", "created", "updated", "reviewed", "shelved_reason")
+        for key in ("created", "updated", "reviewed", "shelved_reason")
     },
 }
 SCALE_NUMBER = re.compile(r"\b([1-5])\b")
@@ -29,6 +30,17 @@ DISPLAY_WIDTH = 60
 
 def _is_list(field: Field) -> bool:
     return field.kind in (Kind.LIST, Kind.TAGS)
+
+
+def normalize_tags(tags: list[str], known: list[str] | None = None) -> list[str]:
+    """Tags once each, ignoring case (first wins), in the spelling of a known tag if any."""
+    spelling = {tag.casefold(): tag for tag in reversed(known or [])}
+    result: dict[str, str] = {}
+    for tag in tags:
+        tag = " ".join(str(tag).split())
+        if tag:
+            result.setdefault(tag.casefold(), spelling.get(tag.casefold(), tag))
+    return list(result.values())
 
 
 # -- reading -------------------------------------------------------------------
@@ -66,10 +78,15 @@ def is_filled(idea: Idea, field: Field) -> bool:
 # -- writing -------------------------------------------------------------------
 
 
-def put(idea: Idea, field: Field, value: Value, order: Order) -> None:
-    """Store a value; None clears it. Does not touch() the idea."""
+def put(
+    idea: Idea, field: Field, value: Value, order: Order, known_tags: list[str] | None = None
+) -> None:
+    """Store a value; None clears it. Does not touch() the idea.
+
+    Tags take the spelling they already have on the idea, or else in `known_tags`.
+    """
     if field.storage == Storage.FRONTMATTER:
-        _put_frontmatter(idea, field, value)
+        _put_frontmatter(idea, field, value, known_tags)
     elif _is_list(field):
         put_text(idea, field, sections.render_items(list(value or [])), order)
     else:
@@ -81,17 +98,36 @@ def add_items(idea: Idea, field: Field, values: list[str], order: Order) -> None
     put_text(idea, field, sections.extend_items(raw(idea, field), values), order)
 
 
-def put_text(idea: Idea, field: Field, text: str, order: Order) -> None:
-    """Write raw Markdown as a summary or section field's content."""
+def put_text(idea: Idea, field: Field, text: str, order: Order) -> bool:
+    """Write raw Markdown as a summary or section field's content.
+
+    A `## ` heading would start a new section, so inside a field it becomes `### `.
+    Returns True when that happened.
+    """
+    text, changed = demote_headings(text)
     body = sections.parse(idea.body)
     if field.storage == Storage.SUMMARY:
         body.preamble = text.strip()
     else:
         sections.upsert(body, field.label, text, field.matches_heading, order)
     idea.body = sections.render(body)
+    return changed
 
 
-def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:
+def summary_text(text: str) -> str:
+    """Text for the summary, with `## ` lines kept as text instead of starting a section."""
+    return demote_headings(text)[0].strip()
+
+
+def demote_headings(text: str) -> tuple[str, bool]:
+    """Turn `## ` headings into `### ` so the text stays in one section."""
+    demoted, count = sections.HEADING.subn(lambda m: "#" + m.group(0), text)
+    return demoted, count > 0
+
+
+def _put_frontmatter(
+    idea: Idea, field: Field, value: Value, known_tags: list[str] | None = None
+) -> None:
     if field.kind == Kind.SCALE and value is not None and not 1 <= int(value) <= 5:
         raise ValueError(f"{field.key} must be a number from 1 to 5")
     if field.key not in KNOWN_KEYS:
@@ -102,18 +138,40 @@ def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:
         return
     if field.key == "effort":
         value = Effort(str(value).upper()) if value else None
-    elif field.key in ("tags", "related"):
+    elif field.key == "tags":
+        value = normalize_tags(list(value or []), [*idea.tags, *(known_tags or [])])
+    elif field.key == "related":
         value = list(value or [])
-    elif field.key == "title" and not value:
-        raise ValueError("title cannot be empty")
+    elif field.key == "title":
+        try:
+            value = clean_title(str(value or ""))
+        except ValueError:
+            raise ValueError("title cannot be empty") from None
     setattr(idea, field.key, value)
+
+
+def add_dated_item(
+    idea: Idea,
+    heading: str,
+    match: Callable[[str], bool],
+    text: str,
+    order: Order,
+    today: dt.date | None = None,
+) -> None:
+    """Append `YYYY-MM-DD: text` to a list section, creating the section if needed."""
+    text = " ".join(text.split())
+    if not text:
+        raise ValueError("the note is empty")
+    body = sections.parse(idea.body)
+    existing = sections.find(body, match)
+    item = f"{(today or dt.date.today()).isoformat()}: {text}"
+    content = sections.append_item(existing.content if existing else "", item)
+    sections.upsert(body, heading, content, match, order)
+    idea.body = sections.render(body)
 
 
 def add_note(idea: Idea, schema: Schema, text: str, today: dt.date | None = None) -> None:
     """Append a dated item to the Notes section, creating the section if needed."""
-    text = " ".join(text.split())
-    if not text:
-        raise ValueError("the note is empty")
     try:
         field = schema.field("notes", labels=False)
     except KeyError:
@@ -122,12 +180,7 @@ def add_note(idea: Idea, schema: Schema, text: str, today: dt.date | None = None
         heading, match = field.label, field.matches_heading
     else:
         heading, match = "Notes", lambda h: h.strip().casefold() == "notes"
-    body = sections.parse(idea.body)
-    existing = sections.find(body, match)
-    item = f"{(today or dt.date.today()).isoformat()}: {text}"
-    content = sections.append_item(existing.content if existing else "", item)
-    sections.upsert(body, heading, content, match, schema.section_order)
-    idea.body = sections.render(body)
+    add_dated_item(idea, heading, match, text, schema.section_order, today)
     idea.touch()
 
 
@@ -167,7 +220,7 @@ def display(field: Field, value: Value) -> str:
     lines = text.strip().splitlines()
     text = lines[0] if lines else ""
     if len(text) > DISPLAY_WIDTH:
-        text = text[: DISPLAY_WIDTH - 3].rstrip() + "..."
+        text = text[: DISPLAY_WIDTH - 1].rstrip() + "…"
     return text
 
 
@@ -201,9 +254,12 @@ def parse_changes(tokens: list[str]) -> list[Change]:
     return changes
 
 
-def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str]:
+def apply_changes(
+    idea: Idea, schema: Schema, changes: list[Change], known_tags: list[str] | None = None
+) -> list[str]:
     """Validate every change, then apply them; returns a short description of each change.
 
+    New tags take the spelling of a tag in `known_tags` (the tags in use) when there is one.
     Raises ValueError listing every problem, without changing the idea.
     """
     problems: list[str] = []
@@ -216,7 +272,7 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
             problems.append(NOT_SETTABLE[key])
             continue
         try:
-            field = schema.field(key, labels=False)
+            field = schema.field(key)  # a key, or a label such as "MVP scope"
         except KeyError:
             known = ", ".join(f.key for f in schema.all_fields())
             problems.append(f"unknown field '{change.key}'; known fields: {known}")
@@ -227,8 +283,15 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
         grouped.setdefault(field.key, (field, []))[1].append(change.value)
 
     planned: dict[str, Value] = {}
+    dated: dict[str, list[str]] = {}  # items to add to dated lists; [] clears the list
     for key, (field, values) in grouped.items():
         is_section_list = field.kind == Kind.LIST and field.storage == Storage.SECTION
+        if is_section_list and field.dated:
+            # Dated lists (notes, log) keep their history: each value adds an item.
+            dated[key] = [" ".join(v.split()) for v in values if v.strip()]
+            if any(not v.strip() for v in values):
+                planned[key] = None
+            continue
         try:
             value = parse(field, values if is_section_list else values[0])
         except ValueError as exc:
@@ -246,17 +309,29 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
         field = grouped[key][0]
         if get(idea, field) == value or (value is None and not is_filled(idea, field)):
             continue
-        put(idea, field, value, schema.section_order)
-        done.append(f"{key} {display(field, value)}" if value is not None else f"{key} cleared")
+        put(idea, field, value, schema.section_order, known_tags)
+        if value is None:
+            done.append(f"{key}: cleared")
+        else:  # what was stored, after cleaning (spaces, tag spelling)
+            done.append(f"{key}: {display(field, get(idea, field))}")
+    for key, items in dated.items():
+        field = grouped[key][0]
+        for item in items:
+            add_dated_item(idea, field.label, field.matches_heading, item, schema.section_order)
+        if items:
+            done.append(f"{key}: added {len(items)} item{'' if len(items) == 1 else 's'}")
+    spelling = {t.casefold(): t for t in reversed(known_tags or [])}
     for change in changes:
-        wanted = change.value.casefold()
+        tag = " ".join(change.value.split())
+        wanted = tag.casefold()
+        tag = spelling.get(wanted, tag)
         present = [t.casefold() for t in idea.tags]
         if change.op == "add_tag" and wanted not in present:
-            idea.tags.append(change.value)
-            done.append(f"+{change.value}")
+            idea.tags.append(tag)
+            done.append(f"tags: +{tag}")
         elif change.op == "remove_tag" and wanted in present:
             idea.tags = [t for t in idea.tags if t.casefold() != wanted]
-            done.append(f"-{change.value}")
+            done.append(f"tags: -{change.value}")
     if done:
         idea.touch()
     return done

@@ -133,3 +133,39 @@ def test_matches_heading_uses_label_and_aliases():
     assert why_now.matches_heading("Why now")
     assert why_now.matches_heading("why me /  why now")
     assert not why_now.matches_heading("Why")
+
+
+def test_duplicate_key_across_stages_rejected(home):
+    write_stages(
+        home,
+        '[sketch]\n[[sketch.fields]]\nkey = "notes"\nlabel = "Scribbles"\nquestion = "Q?"\n',
+    )
+    with pytest.raises(
+        SchemaError, match=r"field 'notes' is defined in both \[sketch\] and \[any\]"
+    ):
+        schema.load(home)
+
+
+def test_same_field_in_two_stages_is_allowed():
+    built_in = schema.builtin()
+    assert built_in.stage("shipped").fields[0] == schema.builtin().field("retro")
+    assert [f.key for f in built_in.stage("shelved").fields] == ["retro"]
+
+
+def test_duplicate_heading_rejected(home):
+    write_stages(
+        home,
+        '[sketch]\n[[sketch.fields]]\nkey = "notes_two"\nlabel = "Problem"\nquestion = "Q?"\n'
+        '[[sketch.fields]]\nkey = "problem"\nlabel = "Problem"\nquestion = "Q?"\n',
+    )
+    with pytest.raises(SchemaError) as exc:
+        schema.load(home)
+    message = str(exc.value)
+    assert "[sketch] 'notes_two' and [sketch] 'problem' both use the heading 'Problem'" in message
+    assert message.count(str(home.stages_file)) == 1
+
+
+def test_key_matches_heading():
+    solution = schema.builtin().field("solution")
+    assert solution.matches_heading("solution")
+    assert schema.builtin().field("why_now").matches_heading("why now")

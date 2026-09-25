@@ -31,9 +31,28 @@ def test_card_without_summary():
 def test_preview_markdown():
     idea = Idea(id="x", title="X", tags=["a"], excitement=3, impact=5, body="Body.")
     assert (
-        views.preview_markdown(idea)
-        == "# X\n\nseed · tags: a · excitement 3/5 · impact 5/5\n\nBody.\n"
+        views.preview_markdown(idea, S)
+        == "# X\n\nx · seed · tags: a · excitement 3/5 · impact 5/5\n\nBody.\n"
     )
+
+
+def test_preview_markdown_lists_empty_sections():
+    idea = Idea(id="x", title="X", body="## Problem\n<!-- q -->\n\n## Value\nMoney.\n")
+    assert views.preview_markdown(idea, S) == (
+        "# X\n\nx · seed\n\n## Value\nMoney.\n\n*Empty: Problem\\**\n"
+    )
+
+
+def test_visible_body_hides_empty_sections():
+    idea = Idea(
+        id="x",
+        title="X",
+        body="Summary.\n\n## Problem\n<!-- What problem? -->\n\n## Who it's for\nMe.\n\n"
+        "## Features\n- \n\n## Mine\n\n## Value\n",
+    )
+    body, empty = views.visible_body(idea, S)
+    assert body == "Summary.\n\n## Who it's for\nMe.\n"
+    assert empty == ["Problem*", "Features*", "Mine", "Value"]
 
 
 def test_filter_ideas():
@@ -53,3 +72,36 @@ def test_filter_ideas():
     assert ids("tag:cli tag:fun") == ["bot", "game"]
     assert ids("status:shelved") == ["old"]
     assert ids("status:seed status:shelved tag:cli") == ["bot", "old"]
+
+
+def test_filter_ignores_comments():
+    ideas = [Idea(id="x", title="X", body="## Problem\n<!-- What problem does it solve? -->\n")]
+    assert views.filter_ideas(ideas, "what problem") == []
+    assert views.filter_ideas(ideas, "problem") == ideas  # the heading is text
+
+
+def test_parse_query_unknown_status():
+    q = views.parse_query("status:bogus status:seed tag:CLI word")
+    assert q.unknown_statuses == ["bogus"]
+    assert q.statuses == {"bogus", "seed"} and q.tags == {"cli"} and q.words == ["word"]
+
+
+def test_visible_body_uses_labels_and_lists_missing_sections():
+    idea = Idea(
+        id="x",
+        title="X",
+        status=Status.SKETCH,
+        body="## problem\nToo slow.\n\n## solution\nCache.\n",
+    )
+    body, empty = views.visible_body(idea, S)
+    assert "## Problem\nToo slow." in body and "## Rough solution\nCache." in body
+    assert empty == ["Who it's for", "Value", "Why now"]
+
+
+def test_visible_body_keeps_line_breaks():
+    idea = Idea(
+        id="x", title="X", body="## Problem\nline one\nline two\n\n```\ncode a\ncode b\n```\n"
+    )
+    body, _ = views.visible_body(idea, S)
+    assert "line one  \nline two" in body
+    assert "code a\ncode b" in body

@@ -9,7 +9,7 @@ from __future__ import annotations
 import functools
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from importlib import resources
 from typing import TYPE_CHECKING, Any
@@ -89,9 +89,14 @@ class Field:
     aliases: tuple[str, ...] = ()
     dated: bool = False
 
+    @property
+    def heading_names(self) -> tuple[str, ...]:
+        """Headings this field is read from: its label, aliases and key (_ read as a space)."""
+        return (self.label, *self.aliases, self.key.replace("_", " "))
+
     def matches_heading(self, heading: str) -> bool:
         wanted = _normalize(heading)
-        return any(_normalize(name) == wanted for name in (self.label, *self.aliases))
+        return any(_normalize(name) == wanted for name in self.heading_names)
 
 
 @dataclass(frozen=True)
@@ -251,10 +256,32 @@ def _parse_field(stage: str, raw: Any, fail) -> Field:
     )
 
 
-def _check_summary(stages: dict[str, Stage], source: str) -> None:
+def _check_merged(stages: dict[str, Stage], source: str) -> None:
+    """Checks across stages: keys and headings must each point to one field."""
     summary = [f for stage in stages.values() for f in stage.fields if f.storage == "summary"]
     if len({f.key for f in summary}) > 1:
         raise SchemaError(f"{source}: only one field can use store 'summary'")
+    by_key: dict[str, Field] = {}
+    for name in STAGE_NAMES:
+        for f in stages[name].fields if name in stages else ():
+            first = by_key.setdefault(f.key, f)
+            # The same field may be repeated in several stages (like retro in shipped and
+            # shelved), but a key cannot mean two different fields.
+            if first is not f and replace(first, stage=f.stage) != f:
+                raise SchemaError(
+                    f"{source}: field '{f.key}' is defined in both [{first.stage}] and [{f.stage}]"
+                )
+    by_heading: dict[str, Field] = {}
+    for f in by_key.values():
+        if f.storage != Storage.SECTION:
+            continue
+        for heading in f.heading_names:
+            other = by_heading.setdefault(_normalize(heading), f)
+            if other is not f:
+                raise SchemaError(
+                    f"{source}: [{other.stage}] '{other.key}' and [{f.stage}] '{f.key}' both use "
+                    f"the heading '{heading}'"
+                )
 
 
 @functools.cache
@@ -264,7 +291,7 @@ def builtin() -> Schema:
     missing = [name for name in STAGE_NAMES if name not in stages]
     if missing:
         raise SchemaError(f"built-in stages.toml: missing {', '.join(missing)}")
-    _check_summary(stages, "built-in stages.toml")
+    _check_merged(stages, "built-in stages.toml")
     return Schema(stages)
 
 
@@ -283,5 +310,5 @@ def load(home: DataHome | None) -> Schema:
         return base
     source = str(home.stages_file)
     merged = merge(base, parse(home.stages_file.read_text(encoding="utf-8"), source))
-    _check_summary(merged.stages, source)
+    _check_merged(merged.stages, source)
     return merged

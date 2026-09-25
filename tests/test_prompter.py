@@ -1,17 +1,24 @@
 import io
 
+import click
 import pytest
 from prompt_toolkit.document import Document
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from rich.console import Console
 
-from metapet.prompter import ScriptedPrompter
-from metapet.questionary_prompter import QuestionaryPrompter, TagCompleter, resolve_long
+from metapet.prompter import PartialAnswer, ScriptedPrompter
+from metapet.questionary_prompter import (
+    ASK_AGAIN,
+    QuestionaryPrompter,
+    TagCompleter,
+    resolve_long,
+)
 from metapet.views import Card
 
 DOWN = "j"  # questionary select also moves down with j
 ENTER = "\r"
+CTRL_C = "\x03"
 
 
 def test_scripted_prompter_pops_answers_and_records_calls():
@@ -79,12 +86,104 @@ def test_tags():
 def test_tag_completion_uses_the_part_after_the_last_comma():
     completer = TagCompleter(["cli", "Client", "web"])
     found = [c.text for c in completer.get_completions(Document("web, CL"), None)]
-    assert found == ["cli", "Client"]
+    assert found == ["cli, ", "Client, "]
     found = [c.text for c in completer.get_completions(Document("cli, "), None)]
-    assert found == ["Client", "web"]
+    assert found == ["Client, ", "web, "]
+
+
+def test_tag_completion_adds_separator():
+    [completion] = TagCompleter(["telegram"]).get_completions(Document("te"), None)
+    assert completion.text == "telegram, " and completion.start_position == -2
+
+
+def test_scale_accepts_digit():
+    assert ask("3" + ENTER, "scale", "How much?") == 3
+    assert ask("0" + ENTER, "scale", "How much?", default=4) is None
+
+
+def test_items_keep_wording_singular():
+    out = io.StringIO()
+    with create_pipe_input() as pipe:
+        pipe.send_text("n" + ENTER + ENTER)
+        prompter = QuestionaryPrompter(
+            Console(file=out, width=200), input=pipe, output=DummyOutput()
+        )
+        assert prompter.items("Features?", current=["a"], clear="pet set x features=") is None
+    assert "No items given; kept the 1 item. Clear the list with pet set x features=." in (
+        out.getvalue()
+    )
 
 
 def test_items_dropping_all_and_adding_none_is_a_skip():
-    assert ask("n" + ENTER, "items", "Features?", current=["a", "b"]) is None
-    assert ask("y" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["a", "c"]
-    assert ask("n" + "c" + ENTER + ENTER, "items", "Features?", current=["a"]) == ["c"]
+    assert ask("n" + ENTER + ENTER, "items", "Features?", current=["a", "b"]) is None
+    keep_and_add = "y" + ENTER + "c" + ENTER + ENTER
+    assert ask(keep_and_add, "items", "Features?", current=["a"]) == ["a", "c"]
+    drop_and_add = "n" + ENTER + "c" + ENTER + ENTER
+    assert ask(drop_and_add, "items", "Features?", current=["a"]) == ["c"]
+
+
+def test_items_ctrl_c_keeps_the_items_entered():
+    with pytest.raises(PartialAnswer) as exc:
+        ask("a" + ENTER + "b" + ENTER + CTRL_C, "items", "Features?", current=[])
+    assert exc.value.value == ["a", "b"]
+    with pytest.raises(KeyboardInterrupt) as exc:
+        ask(CTRL_C, "items", "Features?", current=[])
+    assert not isinstance(exc.value, PartialAnswer)
+
+
+def test_long_falls_back_when_editor_fails():
+    def failing(**kwargs):
+        raise click.ClickException("vim: Editing failed")
+
+    notes = []
+    assert resolve_long("e", "", edit=failing, notify=notes.append) is ASK_AGAIN
+    assert notes == [
+        "Could not open the editor: vim: Editing failed. Type the answer here instead."
+    ]
+
+
+def test_long_asks_again_after_editor_failure(monkeypatch):
+    import metapet.questionary_prompter as qp
+
+    def failing(**kwargs):
+        raise click.ClickException("vim: Editing failed")
+
+    monkeypatch.setattr(qp.click, "edit", failing)
+    assert ask("e" + ENTER + "typed" + ENTER, "long", "Problem?") == "typed"
+
+
+def prompter_with(pipe, out=None):
+    return QuestionaryPrompter(
+        Console(file=out or io.StringIO(), width=200), input=pipe, output=DummyOutput()
+    )
+
+
+def test_yes_waits_for_enter_so_the_next_answer_is_not_skipped():
+    with create_pipe_input() as pipe:
+        pipe.send_text("y" + ENTER + "Math is annoying" + ENTER)
+        prompter = prompter_with(pipe)
+        assert prompter.confirm("Go on to sketch?") is True
+        assert prompter.text("What problem does it solve?") == "Math is annoying"
+
+
+def test_hint_is_printed_on_its_own_line():
+    out = io.StringIO()
+    with create_pipe_input() as pipe:
+        pipe.send_text("Plant bot" + ENTER)
+        assert prompter_with(pipe, out).text("Short name?", hint="A few words.") == "Plant bot"
+    assert "  A few words." in out.getvalue()
+
+
+def test_editor_hint_is_dropped_after_the_editor_fails(monkeypatch):
+    import metapet.questionary_prompter as qp
+
+    def failing(**kwargs):
+        raise click.ClickException("vim: Editing failed")
+
+    monkeypatch.setattr(qp.click, "edit", failing)
+    out = io.StringIO()
+    with create_pipe_input() as pipe:
+        pipe.send_text("e" + ENTER + "typed" + ENTER)
+        assert prompter_with(pipe, out).long("Problem?") == "typed"
+    lines = [line.strip() for line in out.getvalue().splitlines()]
+    assert lines.index("Enter skips; e opens your editor") < lines.index("Enter skips")

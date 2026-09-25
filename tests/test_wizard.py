@@ -4,7 +4,7 @@ import pytest
 
 from metapet import fields, schema, stages, wizard
 from metapet.model import Idea, Status
-from metapet.prompter import ScriptedPrompter
+from metapet.prompter import PartialAnswer, ScriptedPrompter
 
 S = schema.builtin()
 TODAY = dt.date(2026, 1, 2)
@@ -42,7 +42,17 @@ def test_new_idea_asks_only_missing_seed_fields(store):
     saved = on_disk(store, idea)
     assert saved.excitement == 4 and saved.body.strip() == "Track spending."
     assert p.cards[0].title == "Budget tracker"
-    assert "pet set budget-tracker KEY=" in p.messages[0]
+    assert p.messages[0] == (
+        "Press Enter to skip a question. Change answers later with pet refine budget-tracker."
+    )
+
+
+def test_start_hint_once_per_session(store):
+    idea = store.create("Budget tracker")
+    s, p = session(store, ["One.", "Two."])
+    wizard.refine(s, idea, S.field("summary"))
+    wizard.refine(s, idea, S.field("summary"))
+    assert len([m for m in p.messages if m.startswith("Press Enter")]) == 1
 
 
 def test_answers_are_saved_before_ctrl_c(store):
@@ -66,8 +76,11 @@ def test_continuation_promotes_to_sketch_and_asks_its_questions(store):
     idea = store.create("Budget tracker")
     s, p = session(store, [True, "Money leaks.", None, "A small CLI.", None, None, False])
     wizard.continue_stages(s, idea)
-    assert asked(p)[0] == "Promote to sketch and answer its questions now?"
-    assert asked(p)[-1] == "Promote to spec and answer its questions now?"
+    assert asked(p)[0] == (
+        "Go on to sketch (thought through for a few minutes)? 5 questions: Problem, "
+        "Who it's for, Rough solution, ..."
+    )
+    assert asked(p)[-1].startswith("Go on to spec (concrete enough to start building from)?")
     saved = on_disk(store, idea)
     assert saved.status == Status.SKETCH
     assert "## Problem\nMoney leaks." in saved.body
@@ -78,7 +91,7 @@ def test_continuation_warns_instead_of_asking_about_gaps(store):
     idea = sketch_idea(store)
     s, p = session(store, [True, *[None] * SPEC_QUESTIONS, False])
     wizard.continue_stages(s, idea)
-    assert "Warning: still empty: Problem (sketch), Rough solution (sketch)" in p.messages
+    assert "Warning: still empty: Problem (problem), Rough solution (solution)" in p.messages
     assert on_disk(store, idea).status == Status.SPEC
 
 
@@ -86,7 +99,7 @@ def test_promote_with_gaps_can_be_cancelled(store):
     idea = sketch_idea(store)
     s, p = session(store, ["cancel"])
     assert wizard.promote(s, idea, Status.SPEC) is False
-    assert "Still empty: Problem (sketch), Rough solution (sketch)" in p.messages
+    assert "Still empty: Problem (problem), Rough solution (solution)" in p.messages
     method, _, kwargs = p.calls[0]
     assert method == "select"
     assert [label for _, label in kwargs["options"]] == [
@@ -127,17 +140,56 @@ def test_filled_gaps_are_not_asked_again_in_a_reached_stage(store):
     assert "## Problem\nMoney leaks." in saved.body
 
 
-def test_promote_prefills_current_values(store):
+def test_promote_skips_filled_fields(store):
     idea = sketch_idea(store, problem="P", solution="S", mvp="Just a script", effort="M")
-    s, p = session(store, [None] * SPEC_QUESTIONS)
+    s, p = session(store, [None] * (SPEC_QUESTIONS - 2))
     wizard.promote(s, idea, Status.SPEC)
-    by_question = {question: kwargs for _, question, kwargs in p.calls}
-    assert by_question["What is the smallest version you would actually use?"]["current"] == (
-        "Just a script"
-    )
-    assert by_question["How big is it?"]["default"] == "M"
-    assert by_question["What should it do?"]["current"] == []
+    questions = asked(p)
+    assert "What is the smallest version you would actually use?" not in questions
+    assert "How big is it?" not in questions
+    assert questions[0] == "What should it do?"
     assert "## MVP scope\nJust a script" in on_disk(store, idea).body
+
+
+def test_promote_anyway_does_not_ask_gaps(store):
+    idea = store.create("Budget tracker")
+    s, p = session(store, ["anyway", *[None] * 20])
+    assert wizard.promote(s, idea, Status.BUILDING) is True
+    questions = asked(p)
+    for gap in (
+        "What problem does it solve?",
+        "How could it work, roughly?",
+        "What should it do?",
+        "What is the smallest version you would actually use?",
+    ):
+        assert gap not in questions
+
+
+def test_one_card_per_promotion(store):
+    idea = store.create("Budget tracker")
+    s, p = session(store, [None] * 5)
+    wizard.promote(s, idea, Status.SKETCH)
+    assert [card.stage for card in p.cards] == ["sketch"]
+    s.prompter.answers = ["anyway", *[None] * SPEC_QUESTIONS]
+    wizard.promote(s, idea, Status.SPEC)
+    assert [card.stage for card in p.cards] == ["sketch", "spec"]
+
+
+def test_continue_question_names_the_stage(store):
+    idea = sketch_idea(store, problem="P")
+    question = wizard.continue_question(
+        wizard.Session(S, ScriptedPrompter([]), store.save, []), idea, Status.SPEC
+    )
+    assert question == (
+        "Go on to spec (concrete enough to start building from)? 7 questions: Features, "
+        "MVP scope, Stack, ..."
+    )
+    idea = store.create("Other")
+    for key in ("problem", "audience", "solution", "value", "why_now"):
+        fields.put(idea, S.field(key), "x", S.section_order)
+    assert wizard.continue_question(
+        wizard.Session(S, ScriptedPrompter([]), store.save, []), idea, Status.SKETCH
+    ).endswith("Its questions are already answered.")
 
 
 def test_promote_backwards_asks_nothing(store):
@@ -156,17 +208,20 @@ def test_dated_list_items_get_todays_date(store):
     assert "## Notes\n- old note\n- 2026-01-02: new note" in on_disk(store, idea).body
 
 
-def test_refine_picker_markers_follow_answers(store):
+def test_refine_picker_labels_and_default(store):
     idea = store.create("Budget tracker")
     s, p = session(store, ["summary", "Track spending.", ""])
     wizard.refine(s, idea, None)
-    first, second = (kwargs["options"] for method, _, kwargs in p.calls if method == "select")
-    assert ("summary", "[ ] Summary  (seed)") in first
-    assert ("summary", "[x] Summary  (seed)") in second
-    assert ("title", "[x] Title  (seed)") in first
-    assert ("notes", "[ ] Notes  (any stage)") in first
-    assert first[-1] == ("", "Done")
-    assert "problem" not in {value for value, _ in first}  # later stage
+    first, second = ((kw["options"], kw["default"]) for m, _, kw in p.calls if m == "select")
+    options, default = first
+    assert options[0] == ("", "Done") and default is None
+    assert ("summary", "· Summary (seed)") in options
+    assert ("title", "✓ Title* (seed)") in options
+    assert ("notes", "· Notes (any stage)") in options
+    assert "problem" not in {value for value, _ in options}  # later stage
+    options, default = second
+    assert ("summary", "✓ Summary (seed)") in options
+    assert default == "tags"  # the field after summary
     assert on_disk(store, idea).body.strip() == "Track spending."
 
 
@@ -181,7 +236,64 @@ def test_refine_one_field(store):
 def test_ask_title_repeats_until_given(store):
     s, p = session(store, ["", "  ", "Budget tracker"])
     assert wizard.ask_title(s) == "Budget tracker"
-    assert p.messages == ["A title is needed.", "A title is needed."]
+    assert p.messages == ["A name is needed (Ctrl-C to cancel)."] * 2
+
+
+PARAGRAPH = (
+    "A safe, reversible CLI that turns a messy folder of downloaded files into a clean, "
+    "organized library: it detects duplicates, groups by type and date, suggests names, and "
+    "shows a dry-run plan before touching anything."
+)
+
+
+def test_title_question_has_hint(store):
+    s, p = session(store, ["Budget tracker"])
+    wizard.ask_name(s)
+    method, question, kwargs = p.calls[0]
+    assert (method, question) == ("text", "Short name for the idea")
+    assert kwargs["hint"] == "A few words, like Plant watering bot. The id is made from it."
+
+
+def test_long_title_moves_to_summary_and_asks_short_name(store):
+    s, p = session(store, [PARAGRAPH, True, "Downloads tidier"])
+    name = wizard.ask_name(s)
+    assert name == wizard.Name("Downloads tidier", PARAGRAPH, "downloads-tidier")
+    assert p.calls[1][1].startswith("That is long for a name.")
+    # The suggestion is only shown: typing replaces it instead of being added to it.
+    assert p.calls[2][2]["default"] == ""
+    assert p.calls[2][2]["hint"] == "Press Enter to use: A safe, reversible CLI that turns a messy"
+    assert len(p.calls) == 3  # no id question: the id is exact
+
+
+def test_enter_at_short_name_uses_the_suggestion(store):
+    s, _ = session(store, [PARAGRAPH, True, None, None])
+    name = wizard.ask_name(s)
+    assert name.title == "A safe, reversible CLI that turns a messy"
+    assert name.extra_summary == PARAGRAPH
+
+
+def test_long_title_kept_when_user_says_no(store):
+    s, p = session(store, [PARAGRAPH, False, None])
+    name = wizard.ask_name(s)
+    assert name.title == " ".join(PARAGRAPH.split()) and name.extra_summary is None
+    method, question, kwargs = p.calls[2]
+    assert (method, question) == ("text", "Id")
+    assert kwargs["default"] == ""
+    assert kwargs["hint"].endswith("Press Enter to use: safe-reversible-cli-that-turns-a-messy")
+    assert name.id == "safe-reversible-cli-that-turns-a-messy"
+
+
+def test_non_latin_title_asks_for_id(store):
+    store.create("Taken", id="taken")
+    s, p = session(store, ["Телеграм бот для погоды", "Weather Bot", "taken", "weather-bot"])
+    s.exists = store.exists
+    name = wizard.ask_name(s)
+    assert name.id == "weather-bot"
+    assert [kwargs["hint"] for m, q, kwargs in p.calls if q == "Id"][0].endswith(
+        "Press Enter to use: telegram-bot-dlya-pogody"
+    )
+    assert p.messages[0].startswith("An id uses lowercase letters")
+    assert p.messages[1] == "An idea with id 'taken' already exists."
 
 
 def test_empty_list_answer_keeps_the_items(store):
@@ -214,3 +326,35 @@ def test_starting_the_list_again_rewrites_the_section(store):
     s, _ = session(store, [["export"]])
     wizard.ask_field(s, idea, S.field("features"))
     assert "## Features\n- export\n" in on_disk(store, idea).body
+
+
+def test_duplicate_name_can_be_cancelled(store):
+    store.create("Budget tracker")
+    s, p = session(store, ["budget tracker", False])
+    s.same_title = store.same_title
+    assert wizard.ask_name(s) is None
+    assert p.calls[1][1] == (
+        "An idea with this name already exists: budget-tracker (seed). Create another one anyway?"
+    )
+    assert p.messages[-1] == 'Nothing added. Add to it with pet note budget-tracker "..."'
+    s, p = session(store, ["budget tracker", True])
+    s.same_title, s.exists = store.same_title, store.exists
+    assert wizard.ask_name(s).id == "budget-tracker-2"
+
+
+def test_partial_list_is_saved_on_ctrl_c(store):
+    idea = sketch_idea(store)
+    stages.move(idea, Status.SPEC, S)
+    store.save(idea)
+    s, _ = session(store, [PartialAnswer(["a", "b"])])
+    with pytest.raises(KeyboardInterrupt):
+        wizard.ask_field(s, idea, S.field("features"))
+    assert "## Features\n- a\n- b" in on_disk(store, idea).body
+
+
+def test_partial_dated_list_gets_dates(store):
+    idea = store.create("Budget tracker")
+    s, _ = session(store, [PartialAnswer(["one"])])
+    with pytest.raises(KeyboardInterrupt):
+        wizard.ask_field(s, idea, S.field("notes"))
+    assert "- 2026-01-02: one" in on_disk(store, idea).body

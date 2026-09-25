@@ -1,10 +1,14 @@
 import datetime as dt
+import io
 import json
+import re
 
+from rich.console import Console
 from typer.testing import CliRunner
 
 from metapet import cli
 from metapet.cli import app
+from metapet.model import Idea
 from metapet.prompter import ScriptedPrompter
 
 runner = CliRunner()
@@ -95,8 +99,33 @@ def test_long_paths_are_never_wrapped(home, monkeypatch):
     monkeypatch.setattr(cli.console, "width", 20)
     pet(home, "init")
     assert pet(home, "where").output.startswith(str(home.path))
-    added = pet(home, "add", "A very long idea title that makes a long path").output
-    assert str(home.ideas / "a-very-long-idea-title-that-makes-a-long-path.md") in added
+    added = pet(home, "add", "Long idea title that makes a long path", "-v").output
+    assert str(home.ideas / "long-idea-title-that-makes-a-long-path.md") in added
+
+
+def test_add_prints_id_and_title_without_path(home):
+    pet(home, "init")
+    assert pet(home, "add", "Budget tracker").output == "+ budget-tracker  Budget tracker\n"
+    result = pet(home, "new", "x" * 55, "--id", "long", "--no-input")
+    assert result.output == "+ long  " + "x" * 49 + "…\n"
+
+
+def test_verbose_prints_path(home):
+    pet(home, "init")
+    added = pet(home, "add", "Budget tracker", "-v").output
+    assert str(home.ideas / "budget-tracker.md") in added
+    moved = pet(home, "promote", "budget", "-v").output
+    assert moved.startswith("budget-tracker: seed → sketch")
+    assert str(home.ideas / "budget-tracker.md") in moved
+    assert "budget-tracker.md" not in pet(home, "promote", "budget").output
+
+
+def test_set_prints_one_line_per_change(home):
+    pet(home, "init")
+    pet(home, "add", "Plant bot")
+    pet(home, "promote", "plant")
+    result = pet(home, "set", "plant", "problem=a b", "value=c")
+    assert result.output.splitlines() == ["plant-bot: problem: a b", "  value: c"]
 
 
 def complete(home, words):
@@ -152,7 +181,7 @@ def test_new_needs_a_title(home):
 
 def test_new_rejects_bad_values_without_creating_a_file(home):
     pet(home, "init")
-    result = pet(home, "new", "Thing", "-x", "9", "--set", "bogus=1")
+    result = pet(home, "new", "Thing", "--set", "excitement=9", "--set", "bogus=1")
     assert result.exit_code == 1
     assert "excitement must be a number from 1 to 5" in result.output
     assert "unknown field 'bogus'" in result.output
@@ -174,7 +203,12 @@ def test_set_changes_fields_and_tags(home):
     pet(home, "add", "Budget tracker", "-t", "old", "-t", "keep")
     result = pet(home, "set", "budget", "excitement=4", "+cli", "-old", "features=a", "features=b")
     assert result.exit_code == 0, result.output
-    assert "budget-tracker: excitement 4, features a, b, +cli, -old" in result.output
+    assert result.output.splitlines() == [
+        "budget-tracker: excitement: 4",
+        "  features: a, b",
+        "  tags: +cli",
+        "  tags: -old",
+    ]
     text = idea_text(home, "budget-tracker")
     assert "- keep\n- cli" in text and "## Features\n- a\n- b" in text
     assert pet(home, "set", "budget", "--", "-keep").exit_code == 0
@@ -234,7 +268,7 @@ def test_promote_warns_about_empty_expected_fields(home):
     result = pet(home, "promote", "budget", "--no-input")
     assert result.exit_code == 0
     assert "sketch → spec" in result.output
-    assert "warning: still empty: Problem, Rough solution" in result.output
+    assert "warning: still empty: Problem (problem), Rough solution (solution)" in result.output
     assert "status: spec" in idea_text(home, "budget-tracker")
 
 
@@ -245,9 +279,11 @@ def test_check_lists_readiness_and_warns(home):
     home.templates.mkdir()
     result = pet(home, "check")
     assert result.exit_code == 0, result.output
-    assert "i budget-tracker (sketch): empty: Problem, Rough solution" in result.output
+    assert "· budget-tracker (sketch): empty: Problem (problem), Rough solution (solution)" in (
+        result.output
+    )
     assert "templates/ is no longer used" in result.output
-    assert "1 ideas OK" in result.output
+    assert "1 idea OK" in result.output
 
 
 def test_stages_shows_fields_from_the_stages_file(home):
@@ -288,7 +324,7 @@ def test_new_asks_questions_in_a_terminal(home, monkeypatch):
     result = pet(home, "new", "-t", "money")
     assert result.exit_code == 0, result.output
     assert "budget-tracker" in result.output
-    assert prompter.messages[0] == "A title is needed."
+    assert prompter.messages[0] == "A name is needed (Ctrl-C to cancel)."
     methods = [method for method, _, _ in prompter.calls]
     assert methods == ["text", "text", "text", "scale", "confirm"]  # tags were given
     text = idea_text(home, "budget-tracker")
@@ -311,11 +347,15 @@ def test_ctrl_c_keeps_answers_and_exits_130(home, monkeypatch):
     assert "Track spending." in idea_text(home, "budget-tracker")
 
 
-def test_ctrl_c_before_the_title_creates_nothing(home, monkeypatch):
+def test_ctrl_c_before_title_says_nothing_saved(home, monkeypatch):
     pet(home, "init")
-    interactive(monkeypatch, [KeyboardInterrupt()])
-    assert pet(home, "new").exit_code == 130
-    assert list(home.ideas.iterdir()) == []
+    for stop in (KeyboardInterrupt(), EOFError()):
+        interactive(monkeypatch, [stop])
+        result = pet(home, "new")
+        assert result.exit_code == 130
+        assert "Cancelled. Nothing was saved." in result.output
+        assert "Answers so far" not in result.output
+        assert list(home.ideas.iterdir()) == []
 
 
 def test_refine_in_a_terminal(home, monkeypatch):
@@ -368,7 +408,7 @@ def test_review_without_a_terminal_lists_due_ideas(home):
     result = pet(home, "review")
     assert result.exit_code == 0, result.output
     assert "budget-tracker" in result.output and "recipe-box" not in result.output
-    assert "last seen" in result.output and "2020-01-01" in result.output
+    assert "2020-01-01" in result.output
     assert "Run pet review in a terminal to go through them." in result.output
     assert "reviewed:" not in idea_text(home, "budget-tracker")
 
@@ -437,3 +477,642 @@ def test_ui_without_a_terminal_fails(home):
     result = pet(home, "ui")
     assert result.exit_code == 1
     assert "needs a terminal" in result.output
+
+
+def test_brackets_in_titles_and_tags_are_shown_literally(home):
+    pet(home, "init")
+    pet(home, "add", "Regex tester [/]")
+    pet(home, "add", "Todo [bold] app", "-t", "[red]")
+    outputs = {}
+    for args in (
+        ["ls"],
+        ["next"],
+        ["show", "regex"],
+        ["show", "todo"],
+        ["search", "todo"],
+        ["stats"],
+        ["random"],
+    ):
+        result = pet(home, *args)
+        assert result.exit_code == 0, (args, result.output)
+        outputs[args[0] + " " + " ".join(args[1:])] = result.output
+    assert "[/]" in outputs["show regex"]
+    assert "Todo [bold] app" in outputs["show todo"] and "[red]" in outputs["show todo"]
+    assert "[red]" in outputs["search todo"]
+    assert "[red] 1" in outputs["stats "]
+
+
+def test_add_rejects_blank_title(home):
+    pet(home, "init")
+    for title in ("", "   "):
+        result = pet(home, "add", title)
+        assert result.exit_code == 1
+        assert 'a title is required: pet add "TITLE"' in result.output
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_add_and_new_accept_id(home):
+    pet(home, "init")
+    assert pet(home, "add", "Plant bot", "--id", "plants").exit_code == 0
+    assert (home.ideas / "plants.md").exists()
+    assert pet(home, "new", "Garden", "--id", "Garden-Two", "--no-input").exit_code == 0
+    assert (home.ideas / "garden-two.md").exists()
+    result = pet(home, "add", "X", "--id", "Bad Id")
+    assert result.exit_code == 1 and "single hyphens" in result.output
+    result = pet(home, "new", "X", "--id", "plants", "--no-input")
+    assert result.exit_code == 1 and "an idea with id 'plants' already exists" in result.output
+    assert sorted(p.name for p in home.ideas.iterdir()) == ["garden-two.md", "plants.md"]
+
+
+def test_rename_without_new_id_uses_title(home):
+    pet(home, "init")
+    pet(home, "add", "Plant bot", "--id", "plants")
+    pet(home, "add", "Other")
+    pet(home, "set", "other", "related=plants")
+    result = pet(home, "rename", "plants", "watering")
+    assert result.exit_code == 0, result.output
+    assert "plants → watering" in result.output
+    assert "updated related in: other" in result.output
+    assert "- watering" in idea_text(home, "other")
+    pet(home, "set", "watering", "title=Garden helper")
+    result = pet(home, "rename", "watering")
+    assert "watering → garden-helper" in result.output
+    assert "garden-helper: no change" in pet(home, "rename", "garden-helper").output
+
+
+def test_set_id_points_to_rename(home):
+    pet(home, "init")
+    pet(home, "add", "Garden")
+    result = pet(home, "set", "garden", "id=x")
+    assert result.exit_code == 1
+    assert "use pet rename ID NEW_ID to change the id" in result.output
+
+
+LONG = (
+    "A safe, reversible CLI that turns a messy folder of downloaded files into a clean, "
+    "organized library: it detects duplicates and shows a dry-run plan first."
+)
+
+
+def test_add_long_title_is_shortened(home):
+    pet(home, "init")
+    result = pet(home, "add", LONG)
+    assert result.exit_code == 0, result.output
+    assert 'note: the title was long; kept "A safe, reversible CLI that turns a messy"' in (
+        result.output
+    )
+    idea_id = "safe-reversible-cli-that-turns-a-messy"
+    text = idea_text(home, idea_id)
+    assert "title: A safe, reversible CLI that turns a messy\n" in text
+    assert LONG in text
+
+
+def test_add_keeps_a_many_word_title_that_is_not_long(home):
+    pet(home, "init")
+    title = "Telegram bot that forwards RSS feeds to a channel"
+    result = pet(home, "add", title)
+    assert "note:" not in result.output
+    assert f"title: {title}\n" in idea_text(home, "telegram-bot-that-forwards-rss-feeds")
+
+
+def test_add_long_title_with_id_is_kept(home):
+    pet(home, "init")
+    assert pet(home, "add", LONG, "--id", "tidy").exit_code == 0
+    assert "note:" not in pet(home, "show", "tidy").output
+    assert "organized library" in idea_text(home, "tidy").split("---")[1]
+
+
+def test_new_long_title_in_a_terminal_goes_to_summary(home, monkeypatch):
+    pet(home, "init")
+    interactive(monkeypatch, [LONG, True, "Downloads tidier", None, None, False])
+    result = pet(home, "new", "-m", "First line.")
+    assert result.exit_code == 0, result.output
+    text = idea_text(home, "downloads-tidier")
+    assert "title: Downloads tidier" in text
+    assert f"First line.\n\n{LONG}" in text
+
+
+def wide_ideas():
+    return [
+        Idea(id="x" * 60, title="T" * 200, tags=[f"tag{n}" for n in range(8)], excitement=3),
+        Idea(id="short", title="Short one"),
+    ]
+
+
+def render(table, width):
+    out = io.StringIO()
+    Console(width=width, file=out, force_terminal=True, color_system=None).print(table)
+    return out.getvalue().splitlines()
+
+
+def test_table_one_line_per_idea_at_80(monkeypatch):
+    ideas = wide_ideas()
+    lines = render(cli._ideas_table(ideas, width=80), 80)
+    assert len(lines) == len(ideas) + 1
+    assert "title" in lines[0] and "status" in lines[0]
+    assert all("seed" in line for line in lines[1:])
+    assert "…" in lines[1]
+    assert all(len(line) <= 80 for line in lines)
+
+
+def test_table_drops_low_priority_columns_first():
+    ideas = wide_ideas()
+    narrow = render(cli._ideas_table(ideas, width=80), 80)[0]
+    assert "created" not in narrow and "exc" in narrow
+    wide = render(cli._ideas_table(ideas, width=160), 160)[0]
+    for name in ("id", "title", "status", "exc", "tags", "imp", "effort", "created"):
+        assert name in wide
+
+
+def test_ls_piped_is_tab_separated(home):
+    pet(home, "init")
+    pet(home, "add", "Telegram bot that forwards RSS feeds", "-t", "telegram", "-t", "bot")
+    lines = pet(home, "ls").output.splitlines()
+    assert len(lines) == 1
+    parts = lines[0].split("\t")
+    assert len(parts) == 8
+    assert parts[:4] == [
+        "telegram-bot-that-forwards-rss-feeds",
+        "seed",
+        "Telegram bot that forwards RSS feeds",
+        "telegram,bot",
+    ]
+    scored = pet(home, "ls", "--sort", "score").output.splitlines()[0].split("\t")
+    assert len(scored) == 9
+
+
+def test_check_reports_long_ids(home):
+    pet(home, "init")
+    long_id = "a" * 60
+    (home.ideas / f"{long_id}.md").write_text(
+        f"---\nid: {long_id}\ntitle: Long\nstatus: seed\ncreated: 2026-01-01\n---\n"
+    )
+    result = pet(home, "check")
+    assert f"{long_id}.md: id is longer than 40 characters; shorten it with pet rename" in (
+        result.output
+    )
+
+
+def test_show_prints_full_title_and_id(home):
+    pet(home, "init")
+    title = " ".join(["word"] * 40)  # 199 characters
+    pet(home, "add", title, "--id", "flash")
+    pet(home, "promote", "flash", "--no-input")
+    result = runner.invoke(app, ["--home", str(home.path), "show", "flash"], env={"COLUMNS": "80"})
+    assert result.exit_code == 0, result.output
+    assert " ".join(result.output.split()).count(title) == 1
+    assert "flash · sketch" in result.output
+    assert "## Problem" not in result.output and "Problem" not in result.output.split("Empty:")[0]
+    assert "Empty: Problem*, Who it's for, Rough solution*, Value, Why now" in result.output
+    pet(home, "set", "flash", "problem=Hard to review")
+    output = pet(home, "show", "flash").output
+    assert "Problem" in output.split("Empty:")[0] and "Hard to review" in output
+    assert "Empty: Who it's for" in output
+
+
+class FakeContext:
+    def __init__(self, home):
+        self.params = {"home": str(home.path)}
+
+    def find_root(self):
+        return self
+
+
+def test_completion_descriptions_are_one_line(home):
+    pet(home, "init")
+    pet(home, "add", "word " * 30, "--id", "spec")
+    [(idea_id, description)] = cli._complete_ids(FakeContext(home), "s")
+    assert idea_id == "spec"
+    assert "\n" not in description and len(description) <= 50 and description.endswith("…")
+
+
+def test_completion_falls_back_to_fragments(home):
+    pet(home, "init")
+    pet(home, "add", "داشبورد خانگی", "--id", "dashboard")
+    pet(home, "add", "Telegram bot")
+    assert [i for i, _ in cli._complete_ids(FakeContext(home), "خانگی")] == ["dashboard"]
+    assert [i for i, _ in cli._complete_ids(FakeContext(home), "bot")] == ["telegram-bot"]
+    assert [i for i, _ in cli._complete_ids(FakeContext(home), "tel")] == ["telegram-bot"]
+
+
+def _shell_complete(home, words: str, cword: int) -> list[str]:
+    """Ask the CLI for bash completions, the way the installed shell script does."""
+    env = {
+        "_PET_COMPLETE": "complete_bash",
+        # Quoted: the words are split like a shell would, and Windows paths have backslashes.
+        "COMP_WORDS": f"pet --home '{home.path}' {words}",
+        "COMP_CWORD": str(cword + 2),
+    }
+    result = runner.invoke(app, [], env=env, prog_name="pet")
+    return result.output.split()
+
+
+def test_shell_completion_offers_fragment_and_non_latin_matches(home):
+    pet(home, "init")
+    pet(home, "add", "داشبورد خانگی", "--id", "dashboard")
+    pet(home, "add", "Second idea", "--id", "second")
+    assert _shell_complete(home, "show خانگی", 2) == ["dashboard"]
+    assert _shell_complete(home, "show cond", 2) == ["second"]
+    assert _shell_complete(home, "show s", 2) == ["second"]
+    assert _shell_complete(home, "show ", 2) == ["dashboard", "second"]
+
+
+def test_argument_help_has_no_types_or_braces():
+    for command in ("refine", "search", "add", "new"):
+        text = runner.invoke(app, [command, "--help"], env={"COLUMNS": "100"}).output
+        assert "<str>" not in text and "{" not in text, text
+    usage = runner.invoke(app, ["refine", "--help"]).output
+    assert "refine [OPTIONS] ID [FIELD]" in usage
+
+
+def test_list_and_find_aliases(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    assert pet(home, "list").output == pet(home, "ls").output
+    assert pet(home, "find", "budget").output == pet(home, "search", "budget").output
+    assert "budget-tracker" in pet(home, "find", "budget").output
+    help_text = runner.invoke(app, ["--help"], env={"COLUMNS": "200"}).output
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", help_text)  # CI turns colour on
+    assert "│ list " not in help_text and "│ find " not in help_text
+    assert "│ ls " in help_text
+
+
+def test_rm_needs_yes_outside_terminal(home):
+    pet(home, "init")
+    pet(home, "add", "A")
+    result = pet(home, "rm", "a")
+    assert result.exit_code == 1
+    assert "pass --yes to delete without asking" in result.output
+    assert (home.ideas / "a.md").exists()
+
+
+def test_rm_deletes_and_cleans_related(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "A")
+    pet(home, "add", "B")
+    pet(home, "add", "C")
+    pet(home, "set", "b", "related=a,c")
+    result = pet(home, "rm", "a", "--yes")
+    assert result.exit_code == 0, result.output
+    assert "- a" in result.output and "updated related in: b" in result.output
+    assert sorted(p.name for p in home.ideas.iterdir()) == ["b.md", "c.md"]
+    assert "- a\n" not in idea_text(home, "b") and "- c" in idea_text(home, "b")
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: True)
+    assert "Not deleted." in pet(home, "rm", "c", input="n\n").output
+    assert pet(home, "delete", "c", input="y\n").exit_code == 0
+    assert pet(home, "delete", "b", "--yes").exit_code == 0
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_add_duplicate_prints_note(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    result = pet(home, "add", "budget  tracker!")
+    assert "note: budget-tracker has the same name" in result.output
+    assert (home.ideas / "budget-tracker-2.md").exists()
+    prompter = interactive(monkeypatch, [False])
+    result = pet(home, "new", "Budget tracker")
+    assert result.exit_code == 0
+    assert prompter.messages[-1].startswith("Nothing added.")
+    assert len(list(home.ideas.iterdir())) == 2
+
+
+def failing_edit(*args, **kwargs):
+    raise cli.click.ClickException("/nonexistent: Editing failed")
+
+
+def test_edit_with_failing_editor_is_one_line(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    monkeypatch.setattr(cli.click, "edit", failing_edit)
+    for args in (["edit", "budget"], ["edit", "budget", "--field", "problem"]):
+        result = pet(home, *args)
+        assert result.exit_code == 1
+        assert result.output.splitlines() == [
+            "error: /nonexistent: Editing failed (set $EDITOR or $VISUAL)"
+        ]
+
+
+def test_edit_reports_broken_frontmatter(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    path = home.ideas / "budget-tracker.md"
+
+    def breaking_edit(filename=None, **kwargs):
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace("title: Budget tracker", "title: Budget: x: y"))
+
+    monkeypatch.setattr(cli.click, "edit", breaking_edit)
+    result = pet(home, "edit", "budget")
+    assert result.exit_code == 1
+    assert "budget-tracker.md cannot be read" in result.output
+    assert "pet check" in result.output
+
+
+def test_ls_warns_about_unreadable_files(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    (home.ideas / "pomo.md").write_text("---\ntitle: [unclosed\n---\n")
+    for args in (["ls"], ["next"], ["search", "budget"], ["stats"], ["review"]):
+        result = pet(home, *args)
+        assert result.exit_code == 0, (args, result.output)
+        assert (
+            "warning: 1 idea file could not be read (pet check shows why): pomo.md" in result.output
+        ), args
+    result = pet(home, "show", "pomo")
+    assert result.exit_code == 1
+    assert "pomo.md cannot be read" in result.output
+    assert "fix it with pet edit pomo" in result.output
+
+
+def test_edit_prints_the_error_once_when_not_reopened(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    path = home.ideas / "budget-tracker.md"
+
+    def breaking_edit(filename=None, **kwargs):
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace("title: Budget tracker", "title: Budget: x: y"))
+
+    monkeypatch.setattr(cli.click, "edit", breaking_edit)
+    monkeypatch.setattr(cli.click, "confirm", lambda *args, **kwargs: False)
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: True)
+    result = pet(home, "edit", "budget")
+    assert result.exit_code == 1
+    assert result.output.count("cannot be read") == 1
+    assert "Fix it with pet edit budget-tracker" in result.output
+
+
+def test_set_echoes_the_stored_value(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    assert "title: A b" in pet(home, "set", "budget", "title=  A   b ").output
+
+
+def test_edit_opens_unreadable_file(home, monkeypatch):
+    pet(home, "init")
+    path = home.ideas / "pomo.md"
+    path.write_text("---\ntitle: [unclosed\n---\n")
+    opened = []
+
+    def fixing_edit(filename=None, **kwargs):
+        opened.append(filename)
+        path.write_text("---\nid: pomo\ntitle: Pomodoro\nstatus: seed\ncreated: 2026-01-01\n---\n")
+
+    monkeypatch.setattr(cli.click, "edit", fixing_edit)
+    result = pet(home, "edit", "pomo")
+    assert result.exit_code == 0, result.output
+    assert opened == [str(path)]
+    assert "Pomodoro" in pet(home, "show", "pomo").output
+
+
+def test_add_dedupes_tags(home):
+    pet(home, "init")
+    pet(home, "add", "T", "-t", "bot", "-t", "bot", "-t", "BOT")
+    assert idea_text(home, "t").lower().count("bot") == 1
+    pet(home, "add", "Old", "-t", "telegram")
+    pet(home, "add", "U", "-t", "Telegram")
+    assert "- telegram" in idea_text(home, "u") and "Telegram" not in idea_text(home, "u")
+    pet(home, "new", "V", "-t", "TELEGRAM", "-t", "telegram", "--no-input")
+    assert idea_text(home, "v").count("telegram") == 1
+    assert "bot 1" in pet(home, "stats").output
+
+
+def test_set_uses_the_spelling_of_tags_in_use(home):
+    pet(home, "init")
+    pet(home, "add", "A", "-t", "bot", "-t", "telegram")
+    pet(home, "add", "B")
+    pet(home, "add", "C")
+    assert "tags: +bot" in pet(home, "set", "b", "+Bot").output
+    assert "- bot" in idea_text(home, "b") and "Bot" not in idea_text(home, "b")
+    pet(home, "set", "c", "tags=TELEGRAM, Bot, bot")
+    text = idea_text(home, "c")
+    assert "- telegram" in text and "- bot" in text
+    assert "TELEGRAM" not in text and "Bot" not in text
+
+
+def test_check_warns_duplicate_sections(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker", "-m", "x")
+    path = home.ideas / "budget-tracker.md"
+    path.write_text(path.read_text() + "\n## Problem\none\n\n## problem\ntwo\n")
+    result = pet(home, "check")
+    assert result.exit_code == 0
+    assert "budget-tracker.md: two 'Problem' sections; only the first is used" in result.output
+
+
+def test_check_prints_stages_path_once(home):
+    pet(home, "init")
+    home.stages_file.write_text(
+        '[sketch]\n[[sketch.fields]]\nkey = "notes"\nlabel = "Problem"\nquestion = "Q?"\n'
+        '[[sketch.fields]]\nkey = "problem"\nlabel = "Problem"\nquestion = "Q?"\n',
+        encoding="utf-8",
+    )
+    result = pet(home, "check")
+    assert result.exit_code == 1
+    assert "✗" in result.output and "'notes'" in result.output
+    assert " ".join(result.output.split()).count(str(home.stages_file)) == 1
+
+
+def test_key_heading_is_not_empty(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget")
+    path = home.ideas / "budget-tracker.md"
+    path.write_text(path.read_text().replace("## Rough solution\n<!--", "## solution\nA CLI\n<!--"))
+    assert "Rough solution" not in pet(home, "check").output
+
+
+def test_edit_field_twice_does_not_duplicate_heading(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Chess")
+    pet(home, "promote", "chess")
+    monkeypatch.setattr(cli.click, "edit", lambda **kwargs: "Score one\n\n## Stretch\nELO\n")
+    result = pet(home, "edit", "chess", "--field", "problem")
+    assert "note: ## headings inside a field were changed to ###" in result.output
+    pet(home, "edit", "chess", "--field", "problem")
+    text = idea_text(home, "chess")
+    assert "\n## Stretch" not in text and text.count("### Stretch") == 1
+
+
+def test_search_words_and_ids(home):
+    pet(home, "init")
+    pet(home, "add", "Music tagger", "-t", "music", "-t", "cli")
+    pet(home, "add", "D-d thing", "--id", "d-d")
+    pet(home, "promote", "d-d")
+    assert "d-d" in pet(home, "search", "d-d").output
+    assert "music-tagger" in pet(home, "search", "music", "cli").output
+    assert "music-tagger" in pet(home, "search", "music-tag").output
+    result = pet(home, "search", "what problem")
+    assert "No ideas match 'what problem'." in result.output
+
+
+def test_search_hides_shelved_unless_all(home):
+    pet(home, "init")
+    pet(home, "add", "Music tagger")
+    pet(home, "shelve", "music", "later")
+    output = pet(home, "search", "music").output
+    assert "No ideas match 'music'. (shipped and shelved ideas are hidden; add -a)" in output
+    assert "music-tagger" in pet(home, "search", "music", "-a").output
+    assert "music-tagger" in pet(home, "search", "music", "status:shelved").output
+
+
+def test_search_empty_is_error(home):
+    pet(home, "init")
+    result = pet(home, "search", "")
+    assert result.exit_code == 1 and "give words to search for" in result.output
+
+
+def test_export_to_stdout(home, tmp_path, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    monkeypatch.chdir(tmp_path)
+    result = pet(home, "export", "--md", "-")
+    assert result.exit_code == 0
+    assert result.output.startswith("# Ideas") and "wrote" not in result.output
+    assert not (tmp_path / "-").exists()
+    assert json.loads(pet(home, "export", "--json", "-").output)[0]["id"] == "budget-tracker"
+
+
+def test_export_missing_dir_is_error(home, tmp_path):
+    pet(home, "init")
+    missing = tmp_path / "nope" / "x.md"
+    result = pet(home, "export", "--md", str(missing))
+    assert result.exit_code == 1
+    assert result.output == f"error: directory {missing.parent} does not exist\n"
+
+
+def test_shelve_twice_says_replaced(home):
+    pet(home, "init")
+    pet(home, "add", "Dash")
+    pet(home, "shelve", "dash", "Too many dashboards")
+    result = pet(home, "shelve", "dash", "again")
+    assert "dash was already shelved (Too many dashboards); reason replaced" in result.output
+    assert idea_text(home, "dash").count("Shelved:") == 2
+    pet(home, "promote", "dash", "--to", "sketch", "--no-input")
+    assert "Back from the shelf (it was shelved: again)" in idea_text(home, "dash")
+    assert pet(home, "shelve", "dash", "").exit_code == 1
+
+
+def test_promote_back_says_moved_back(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget", "--to", "building", "--no-input")
+    result = pet(home, "promote", "budget", "--to", "seed", "--no-input")
+    assert "budget-tracker: building → seed (moved back)" in result.output
+
+
+def test_check_lists_every_problem(home):
+    pet(home, "init")
+    (home.ideas / "bad-values.md").write_text(
+        "---\nid: bad-values\ntitle: Bad\nstatus: prototype\ncreated: yesterday\n"
+        "excitement: 9\neffort: huge\n---\n"
+    )
+    result = pet(home, "check")
+    assert result.exit_code == 1
+    for line in (
+        "✗ bad-values.md:",
+        "    status: 'prototype' is not one of seed, sketch, spec, building, shipped, shelved",
+        "    created: 'yesterday' is not a date (YYYY-MM-DD)",
+        "    excitement: must be 1-5, got 9",
+        "    effort: 'huge' must be S, M, L or XL",
+    ):
+        assert line in result.output.splitlines()
+
+
+def test_refine_has_no_no_input(home):
+    pet(home, "init")
+    pet(home, "add", "X")
+    result = pet(home, "refine", "x", "--no-input")
+    assert result.exit_code == 2
+    assert "No such option" in result.output
+
+
+def test_ls_empty_store_vs_no_match(home):
+    pet(home, "init")
+    assert pet(home, "ls").output == 'No ideas yet. Capture one with pet add "..."\n'
+    pet(home, "add", "A")
+    assert pet(home, "ls", "-t", "nope").output == "No ideas match these filters.\n"
+
+
+def test_ls_hidden_footer(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "A")
+    pet(home, "add", "B")
+    pet(home, "shelve", "a", "x")
+    monkeypatch.setattr(cli, "console", Console(force_terminal=True, color_system=None, width=100))
+    output = pet(home, "ls").output
+    assert "1 shipped or shelved idea hidden (use -a)" in output
+    assert "hidden" not in pet(home, "ls", "-a").output
+
+
+def test_next_count_must_be_positive(home):
+    pet(home, "init")
+    pet(home, "add", "A")
+    for count in ("0", "-1"):
+        assert pet(home, "next", "-n", count).exit_code == 2
+
+
+def test_stats_labels(home):
+    pet(home, "init")
+    pet(home, "add", "A", "-t", "x")
+    pet(home, "add", "B")
+    pet(home, "shelve", "b", "later")
+    output = pet(home, "stats").output
+    assert "2 ideas (1 live)" in output
+    assert "top tags" in output and "added (last 6 months)" in output
+    assert f"{dt.date.today():%Y-%m} 2" in output
+
+
+def test_last_months():
+    assert cli._last_months(dt.date(2026, 2, 5), 3) == ["2025-12", "2026-01", "2026-02"]
+
+
+def test_docstrings_have_one_line_paragraphs():
+    lifecycle = set(cli.LIFECYCLE_HELP.split("\n\n"))
+    for info in app.registered_commands:
+        help_text = info.help or ""
+        assert help_text, info.name or info.callback.__name__
+        for paragraph in help_text.split("\n\n"):
+            if paragraph in lifecycle:
+                continue
+            assert "\n" not in paragraph, (info.name, paragraph)
+
+
+def test_new_excitement_is_range_checked(home):
+    pet(home, "init")
+    result = pet(home, "new", "x", "-x", "9")
+    assert result.exit_code == 2
+    assert "1<=x<=5" in result.output or "range" in result.output
+    assert list(home.ideas.iterdir()) == []
+
+
+def test_ls_help_lists_sort_choices():
+    output = runner.invoke(app, ["ls", "--help"], env={"COLUMNS": "200"}).output
+    assert "created" in output and "excitement" in output and "score" in output
+
+
+def test_search_rejects_an_unknown_status(home):
+    pet(home, "init")
+    result = pet(home, "search", "status:bogus")
+    assert result.exit_code == 1
+    assert "unknown status: bogus (seed, sketch, spec, building, shipped, shelved)" in result.output
+
+
+def test_edit_field_drops_the_placeholder_comment(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Plant bot")
+    pet(home, "promote", "plant")
+    monkeypatch.setattr(cli.click, "edit", lambda text="", **kwargs: text + "\nWater daily\n")
+    pet(home, "edit", "plant", "--field", "solution")
+    text = idea_text(home, "plant-bot")
+    assert "## Rough solution\nWater daily\n" in text
+
+
+def test_summary_starting_with_a_heading_stays_the_summary(home):
+    pet(home, "init")
+    pet(home, "add", "Notes app", "-m", "## Problem inside summary")
+    text = idea_text(home, "notes-app")
+    assert "### Problem inside summary" in text
+    assert "Problem inside summary" in pet(home, "show", "notes").output

@@ -83,7 +83,7 @@ def test_scale_in_a_section_reads_the_first_number():
 def test_display_shortens():
     assert fields.display(field("tags"), ["a", "b"]) == "a, b"
     long = fields.display(field("problem"), "x" * 100 + "\nsecond")
-    assert len(long) == 60 and long.endswith("...")
+    assert len(long) == 60 and long.endswith("…")
     assert fields.display(field("problem"), None) == ""
 
 
@@ -107,7 +107,13 @@ def apply(idea, *tokens):
 def test_apply_changes():
     idea = Idea(id="x", title="X", tags=["Old", "keep"], body="Line.")
     done = apply(idea, "excitement=4", "why-now=soon", "+cli", "+CLI", "-old", "summary=")
-    assert done == ["excitement 4", "why_now soon", "summary cleared", "+cli", "-old"]
+    assert done == [
+        "excitement: 4",
+        "why_now: soon",
+        "summary: cleared",
+        "tags: +cli",
+        "tags: -old",
+    ]
     assert idea.excitement == 4 and idea.tags == ["keep", "cli"]
     assert idea.updated == dt.date.today()
     assert fields.get(idea, field("why_now")) == "soon"
@@ -157,9 +163,13 @@ def test_apply_changes_reports_every_problem_and_changes_nothing():
     assert idea.to_markdown() == before
 
 
-def test_apply_changes_rejects_labels_as_keys():
-    with pytest.raises(ValueError, match="unknown field 'Rough solution'"):
-        apply(Idea(id="x", title="X"), "Rough solution=x")
+def test_set_accepts_label():
+    idea = Idea(id="x", title="X")
+    assert apply(idea, "MVP scope=Daily message", "rough solution=A bot") == [
+        "mvp: Daily message",
+        "solution: A bot",
+    ]
+    assert fields.get(idea, field("mvp")) == "Daily message"
 
 
 def test_add_note():
@@ -169,3 +179,49 @@ def test_add_note():
     assert idea.body.endswith("## Notes\n- 2026-01-02: first second\n- 2026-01-03: again\n")
     with pytest.raises(ValueError):
         fields.add_note(idea, S, "  ")
+
+
+def test_set_title_collapses_whitespace():
+    idea = Idea(id="x", title="X")
+    apply(idea, "title=a   b")
+    assert idea.title == "a b"
+
+
+def test_set_appends_to_dated_list():
+    idea = Idea(id="x", title="X")
+    fields.add_note(idea, S, "one", today=dt.date(2026, 1, 2))
+    done = apply(idea, "notes=two", "notes=three", "log=started")
+    today = dt.date.today().isoformat()
+    assert fields.get(idea, field("notes")) == [
+        "2026-01-02: one",
+        f"{today}: two",
+        f"{today}: three",
+    ]
+    assert fields.get(idea, field("log")) == [f"{today}: started"]
+    assert done == ["notes: added 2 items", "log: added 1 item"]
+
+
+def test_set_empty_clears_dated_list():
+    idea = Idea(id="x", title="X")
+    fields.add_note(idea, S, "one")
+    assert apply(idea, "notes=") == ["notes: cleared"]
+    assert fields.get(idea, field("notes")) == []
+
+
+def test_normalize_tags():
+    assert fields.normalize_tags(["bot", "bot", "BOT"]) == ["bot"]
+    assert fields.normalize_tags(["Bot", "bot", "Telegram", "", " a  b "], ["telegram"]) == [
+        "Bot",
+        "telegram",
+        "a b",
+    ]
+
+
+def test_put_text_demotes_level_two_headings():
+    idea = Idea(id="x", title="X", body="## Problem\nold\n\n## Value\nv\n")
+    changed = fields.put_text(
+        idea, field("problem"), "Score one\n\n## Stretch\nELO", S.section_order
+    )
+    assert changed is True
+    assert "## Problem\nScore one\n\n### Stretch\nELO\n\n## Value\nv" in idea.body
+    assert fields.put_text(idea, field("problem"), "plain\n### ok", S.section_order) is False

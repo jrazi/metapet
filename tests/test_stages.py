@@ -1,3 +1,7 @@
+import datetime as dt
+
+import pytest
+
 from metapet import schema, stages
 from metapet.model import Idea, Status
 from metapet.schema import Field
@@ -42,7 +46,32 @@ def test_promote_from_shelved_clears_the_reason():
     idea = Idea(id="x", title="X", status=Status.SHELVED, shelved_reason="later")
     stages.promote(idea, Status.SKETCH, S)
     assert idea.shelved_reason is None and idea.status == Status.SKETCH
-    assert "## Problem" not in idea.body
+
+
+def test_back_from_the_shelf_gets_the_stage_sections_and_drops_empty_retro():
+    idea = Idea(id="x", title="X")
+    stages.shelve(idea, "why", S)
+    assert "## Retro" in idea.body
+    stages.promote(idea, Status.SKETCH, S)
+    assert "## Problem" in idea.body and "## Rough solution" in idea.body
+    assert "## Retro" not in idea.body
+    stages.shelve(idea, "again", S)
+    stages.promote(idea, Status.SEED, S)
+    assert "## Retro" not in idea.body
+
+
+def test_back_from_the_shelf_keeps_a_written_retro():
+    idea = Idea(id="x", title="X", status=Status.SHELVED, body="## Retro\nLearned a lot.")
+    stages.promote(idea, Status.SPEC, S)
+    assert "Learned a lot." in idea.body and "## MVP scope" in idea.body
+
+
+def test_shipped_moved_back_drops_empty_retro():
+    idea = Idea(id="x", title="X", status=Status.BUILDING)
+    stages.move(idea, Status.SHIPPED, S)
+    assert "## Retro" in idea.body
+    stages.promote(idea, Status.BUILDING, S)
+    assert "## Retro" not in idea.body and idea.status == Status.BUILDING
 
 
 def test_before():
@@ -92,3 +121,21 @@ def test_describe():
     assert [status for status, _, _ in described][-1] == Status.SHELVED
     assert described[1][1] == "thought through for a few minutes"
     assert [f.key for f in described[1][2]][:2] == ["problem", "audience"]
+
+
+def test_shelve_adds_note_and_rejects_blank():
+    idea = Idea(id="x", title="X")
+    assert stages.shelve(idea, "Too many dashboards", S, dt.date(2026, 1, 2)) is None
+    assert idea.status == Status.SHELVED and idea.shelved_reason == "Too many dashboards"
+    assert "- 2026-01-02: Shelved: Too many dashboards" in idea.body
+    assert stages.shelve(idea, "again", S, dt.date(2026, 1, 3)) == "Too many dashboards"
+    assert idea.body.count("Shelved:") == 2
+    with pytest.raises(ValueError, match="give a reason"):
+        stages.shelve(idea, "  ", S)
+
+
+def test_unshelve_keeps_reason_in_notes():
+    idea = Idea(id="x", title="X", status=Status.SHELVED, shelved_reason="later")
+    stages.promote(idea, Status.SKETCH, S, dt.date(2026, 1, 2))
+    assert "- 2026-01-02: Back from the shelf (it was shelved: later)" in idea.body
+    assert idea.shelved_reason is None

@@ -9,7 +9,7 @@ import datetime as dt
 from dataclasses import dataclass
 
 from metapet import fields, stages, wizard
-from metapet.model import Idea, IdeaError, Status
+from metapet.model import Idea, IdeaError
 from metapet.schema import Field, Kind, Storage
 
 # Used when a custom stages.toml has no excitement field.
@@ -27,7 +27,7 @@ EXCITEMENT = Field(
 class ReviewResult:
     handled: int
     remaining: int
-    stopped: bool = False  # True when Ctrl-C ended the review
+    stopped: bool = False  # True when Ctrl-C or Ctrl-D ended the review
 
 
 def last_seen(idea: Idea) -> dt.date:
@@ -85,8 +85,7 @@ def _act(s: wizard.Session, idea: Idea, action: str) -> None:
     elif action == "shelve":
         reason = (p.text("Why are you shelving it?") or "").strip()
         if reason:
-            stages.move(idea, Status.SHELVED, s.schema)
-            idea.shelved_reason = reason
+            stages.shelve(idea, reason, s.schema, s.today)
 
 
 def _review_one(s: wizard.Session, idea: Idea) -> bool:
@@ -102,6 +101,14 @@ def _review_one(s: wizard.Session, idea: Idea) -> bool:
             idea.mark_reviewed(s.today)
             s.save(idea)
             return True
+
+
+def position(number: int, total: int, idea: Idea, today: dt.date) -> str:
+    """`2/5 · budget-tracker · last seen 2026-05-01 (147 days ago)`"""
+    seen = last_seen(idea)
+    days = (today - seen).days
+    ago = "today" if days <= 0 else "1 day ago" if days == 1 else f"{days} days ago"
+    return f"{number}/{total} · {idea.id} · last seen {seen.isoformat()} ({ago})"
 
 
 def _reload(idea: Idea) -> Idea | None:
@@ -122,16 +129,17 @@ def run(s: wizard.Session, ideas: list[Idea], today: dt.date | None = None) -> R
     s.prompter.message(f"{total} idea{'' if total == 1 else 's'} to review.")
     handled = done = 0
     try:
-        for idea in ideas:
+        for number, idea in enumerate(ideas, start=1):
             fresh = _reload(idea)
             if fresh is None:
                 s.prompter.message(f"{idea.id}: skipped, its file is gone or cannot be read.")
                 done += 1
                 continue
+            s.prompter.message(position(number, total, fresh, s.today))
             if not _review_one(s, fresh):
                 break
             handled += 1
             done += 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         return ReviewResult(handled, total - done, stopped=True)
     return ReviewResult(handled, total - done)

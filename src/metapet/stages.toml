@@ -8,7 +8,8 @@ meaning = "a raw thought: a title, maybe a one-liner"
 [[seed.fields]]
 key = "title"
 label = "Title"
-question = "What is the idea, in a few words?"
+question = "Short name for the idea"
+hint = "A few words, like Plant watering bot. The id is made from it."
 required = true
 store = "frontmatter"
 
@@ -21,8 +22,8 @@ store = "summary"
 [[seed.fields]]
 key = "tags"
 label = "Tags"
-question = "Tags?"
-hint = "Comma separated."
+question = "Tags"
+hint = "Comma separated. Tab completes tags you already use."
 kind = "tags"
 store = "frontmatter"
 
