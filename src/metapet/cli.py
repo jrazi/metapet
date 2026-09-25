@@ -17,6 +17,7 @@ from rich.markdown import Markdown
 from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from metapet import export, fields, paths, schema, scoring, stages, sync, wizard
 from metapet import review as review_
@@ -124,9 +125,11 @@ def _find(store: Store, query: str) -> Idea:
         return store.find(query)
     except IdeaLookupError as exc:
         if exc.candidates:
-            ids = "\n".join(f"  • {i.id}  [dim]{i.title}[/]" for i in exc.candidates)
-            _fail(f"{exc}; be more specific:\n{ids}")
-        _fail(str(exc))
+            ids = "\n".join(
+                f"  • {escape(i.id)}  [dim]{escape(i.title)}[/]" for i in exc.candidates
+            )
+            _fail(f"{escape(str(exc))}; be more specific:\n{ids}")
+        _fail(escape(str(exc)))
 
 
 def _schema(ctx: typer.Context) -> Schema:
@@ -218,13 +221,13 @@ def _ideas_table(
         table.add_column(name, justify="right", no_wrap=True, min_width=width)
     for row, idea in enumerate(ideas):
         table.add_row(
-            idea.id,
-            idea.title,
+            Text(idea.id),
+            Text(idea.title),
             _status(idea.status),
             str(idea.excitement or ""),
             str(idea.impact or ""),
             idea.effort.value if idea.effort else "",
-            ", ".join(idea.tags),
+            Text(", ".join(idea.tags)),
             *([idea.created.isoformat()] if created else []),
             *[values[row] for values in (extra or {}).values()],
         )
@@ -249,17 +252,22 @@ def _print_idea(idea: Idea) -> None:
     if idea.effort:
         details.append(f"effort {idea.effort.value}")
     if idea.tags:
-        details.append("tags " + ", ".join(idea.tags))
+        details.append("tags " + escape(", ".join(idea.tags)))
     if details:
         meta.append("  ·  ".join(details))
     if idea.repo:
-        meta.append(f"repo {idea.repo}")
+        meta.append(f"repo {escape(idea.repo)}")
     if idea.related:
-        meta.append("related " + ", ".join(idea.related))
+        meta.append("related " + escape(", ".join(idea.related)))
     if idea.shelved_reason:
-        meta.append(f"[dim]shelved: {idea.shelved_reason}[/]")
+        meta.append(f"[dim]shelved: {escape(idea.shelved_reason)}[/]")
     console.print(
-        Panel("\n".join(meta), title=f"[bold]{idea.title}[/]", subtitle=idea.id, expand=False)
+        Panel(
+            "\n".join(meta),
+            title=f"[bold]{escape(idea.title)}[/]",
+            subtitle=escape(idea.id),
+            expand=False,
+        )
     )
     if idea.body.strip():
         console.print(Markdown(idea.body))
@@ -336,7 +344,7 @@ def add(
     store = _store(ctx)
     idea_schema = _schema(ctx) if interactive else None
     idea = store.create(title, tags=list(tag or []), body=note or "")
-    console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
+    console.print(f"[green]+[/] {escape(idea.id)}  [dim]{escape(str(idea.path))}[/]", soft_wrap=True)
     if idea_schema is None:
         return
     if not _interactive(False):
@@ -418,7 +426,7 @@ def new(
         _fail(escape(str(exc)))
     idea.updated = None  # just created
     store.save(idea)
-    console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
+    console.print(f"[green]+[/] {escape(idea.id)}  [dim]{escape(str(idea.path))}[/]", soft_wrap=True)
     if session is None:
         return
     supplied = {"title", *(key for key, value in flagged.items() if value is not None)}
@@ -503,12 +511,12 @@ def edit(
     current = fields.raw(idea, field)
     edited = click.edit(text=current, extension=".md")
     if edited is None or edited.strip() == current.strip():
-        console.print(f"{idea.id}: no change")
+        console.print(f"{escape(idea.id)}: no change")
         return
     fields.put_text(idea, field, edited, idea_schema.section_order)
     idea.touch()
     store.save(idea)
-    console.print(f"{idea.id}: {escape(field.label)} updated")
+    console.print(f"{escape(idea.id)}: {escape(field.label)} updated")
 
 
 @app.command(
@@ -533,10 +541,10 @@ def set_(
     except ValueError as exc:
         _fail(escape(str(exc)))
     if not done:
-        console.print(f"{idea.id}: no change")
+        console.print(f"{escape(idea.id)}: no change")
         return
     store.save(idea)
-    console.print(f"{idea.id}: {escape(', '.join(done))}")
+    console.print(f"{escape(idea.id)}: {escape(', '.join(done))}")
 
 
 @app.command()
@@ -551,9 +559,9 @@ def note(
     try:
         fields.add_note(idea, _schema(ctx), text)
     except ValueError as exc:
-        _fail(str(exc))
+        _fail(escape(str(exc)))
     store.save(idea)
-    console.print(f"{idea.id}: noted")
+    console.print(f"{escape(idea.id)}: noted")
 
 
 # -- lifecycle ---------------------------------------------------------------
@@ -582,7 +590,7 @@ def promote(
     idea = _find(store, idea_id)
     target = to or idea.status.next()
     if target is None:
-        _fail(f"{idea.id} is {idea.status.value}; pass --to to move it elsewhere.")
+        _fail(f"{escape(idea.id)} is {idea.status.value}; pass --to to move it elsewhere.")
     if target == Status.SHELVED:
         _fail("use `pet shelve ID REASON` to shelve an idea.")
     old = idea.status
@@ -593,19 +601,21 @@ def promote(
                 console.print("Not promoted.")
                 return
         console.print(
-            f"{idea.id}: {_status(old)} → {_status(target)}  [dim]{idea.path}[/]", soft_wrap=True
+            f"{escape(idea.id)}: {_status(old)} → {_status(target)}  [dim]{escape(str(idea.path))}[/]",
+            soft_wrap=True,
         )
         return
     gaps = stages.gaps(idea, idea_schema, stages.before(target)) if forward else []
     stages.promote(idea, target, idea_schema)
     store.save(idea)
     console.print(
-        f"{idea.id}: {_status(old)} → {_status(target)}  [dim]{idea.path}[/]", soft_wrap=True
+        f"{escape(idea.id)}: {_status(old)} → {_status(target)}  [dim]{escape(str(idea.path))}[/]",
+        soft_wrap=True,
     )
     if gaps:
         labels = escape(", ".join(f.label for f in gaps))
         err.print(
-            f"[yellow]warning:[/] still empty: {labels} (fill them with pet refine {idea.id})",
+            f"[yellow]warning:[/] still empty: {labels} (fill them with pet refine {escape(idea.id)})",
             soft_wrap=True,
         )
 
@@ -659,7 +669,7 @@ def shelve(
     stages.move(idea, Status.SHELVED, _schema(ctx))
     idea.shelved_reason = reason
     store.save(idea)
-    console.print(f"{idea.id}: {_status(Status.SHELVED)}  [dim]{reason}[/]")
+    console.print(f"{escape(idea.id)}: {_status(Status.SHELVED)}  [dim]{escape(reason)}[/]")
 
 
 @app.command(
@@ -731,7 +741,7 @@ def search(ctx: typer.Context, text: Annotated[str, typer.Argument()]) -> None:
         or any(needle in t.lower() for t in idea.tags)
     ]
     if not hits:
-        console.print(f"[dim]Nothing mentions '{text}'.[/]")
+        console.print(f"[dim]Nothing mentions '{escape(text)}'.[/]")
         return
     console.print(_ideas_table(hits))
 
@@ -783,7 +793,7 @@ def stats(ctx: typer.Context) -> None:
         "status", "  ".join(f"{_status(s)} {by_status[s]}" for s in Status if by_status[s])
     )
     if by_tag:
-        table.add_row("tags", "  ".join(f"{t} {n}" for t, n in by_tag.most_common(10)))
+        table.add_row("tags", "  ".join(f"{escape(t)} {n}" for t, n in by_tag.most_common(10)))
     table.add_row("added", "  ".join(f"{m} {n}" for m, n in sorted(by_month.items())[-6:]))
     console.print(table)
 
@@ -805,9 +815,12 @@ def check(ctx: typer.Context) -> None:
     ideas, broken = store.scan()
     mismatched = [i for i in ideas if i.path and i.path.stem != i.id]
     for bad in broken:
-        err.print(f"[red]✗[/] {bad.path.name}: {escape(bad.error)}")
+        err.print(f"[red]✗[/] {escape(bad.path.name)}: {escape(bad.error)}")
     for idea in mismatched:
-        err.print(f"[yellow]![/] {idea.path.name}: id is '{idea.id}' (rename the file to match)")
+        err.print(
+            f"[yellow]![/] {escape(idea.path.name)}: id is '{escape(idea.id)}' "
+            "(rename the file to match)"
+        )
     try:
         idea_schema = schema.load(store.home)
     except SchemaError as exc:
@@ -826,7 +839,8 @@ def check(ctx: typer.Context) -> None:
             if gaps:
                 labels = escape(", ".join(f.label for f in gaps))
                 console.print(
-                    f"[dim]i {idea.id} ({idea.status.value}): empty: {labels}[/]", soft_wrap=True
+                    f"[dim]i {escape(idea.id)} ({idea.status.value}): empty: {labels}[/]",
+                    soft_wrap=True,
                 )
     if broken or idea_schema is None:
         raise typer.Exit(1)

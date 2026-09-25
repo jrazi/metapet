@@ -437,3 +437,19 @@ def test_ui_without_a_terminal_fails(home):
     result = pet(home, "ui")
     assert result.exit_code == 1
     assert "needs a terminal" in result.output
+
+
+def test_brackets_in_titles_and_tags_are_shown_literally(home):
+    pet(home, "init")
+    pet(home, "add", "Regex tester [/]")
+    pet(home, "add", "Todo [bold] app", "-t", "[red]")
+    outputs = {}
+    for args in (["ls"], ["next"], ["show", "regex"], ["show", "todo"], ["search", "todo"],
+                 ["stats"], ["random"]):
+        result = pet(home, *args)
+        assert result.exit_code == 0, (args, result.output)
+        outputs[args[0] + " " + " ".join(args[1:])] = result.output
+    assert "[/]" in outputs["show regex"]
+    assert "Todo [bold] app" in outputs["show todo"] and "[red]" in outputs["show todo"]
+    assert "[red]" in outputs["search todo"]
+    assert "[red] 1" in outputs["stats "]
