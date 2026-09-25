@@ -305,7 +305,10 @@ def apply_changes(
         if get(idea, field) == value or (value is None and not is_filled(idea, field)):
             continue
         put(idea, field, value, schema.section_order, known_tags)
-        done.append(f"{key}: {display(field, value)}" if value is not None else f"{key}: cleared")
+        if value is None:
+            done.append(f"{key}: cleared")
+        else:  # what was stored, after cleaning (spaces, tag spelling)
+            done.append(f"{key}: {display(field, get(idea, field))}")
     for key, items in dated.items():
         field = grouped[key][0]
         for item in items:

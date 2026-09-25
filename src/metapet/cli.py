@@ -867,14 +867,14 @@ def _edit_file(path: Path) -> None:
             idea = Idea.load(path)
         except IdeaError as exc:
             problem = f"{escape(path.name)} cannot be read: {escape(str(exc))}"
+            hint = f"Fix it with pet edit {escape(path.stem)}; pet check lists the problems."
             if _interactive(False):
                 err.print(f"[red]error:[/] {problem}", soft_wrap=True)
                 if click.confirm("Open it again to fix it?", default=True):
                     continue
-            _fail(
-                f"{problem}\nFix it with pet edit {escape(path.stem)}; "
-                "pet check lists the problems."
-            )
+                err.print(hint, soft_wrap=True)
+                raise typer.Exit(1)
+            _fail(f"{problem}\n{hint}")
         if idea.id != path.stem:
             err.print(
                 f"[yellow]warning:[/] the id in {escape(path.name)} is '{escape(idea.id)}', "
@@ -1365,7 +1365,7 @@ def check(ctx: typer.Context) -> None:
                 )
     if broken or idea_schema is None:
         raise typer.Exit(1)
-    console.print(f"[green]✓[/] {len(ideas)} ideas OK")
+    console.print(f"[green]✓[/] {len(ideas)} idea{'' if len(ideas) == 1 else 's'} OK")
 
 
 def _label_keys(found: list[schema.Field]) -> str:

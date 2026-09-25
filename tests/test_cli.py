@@ -282,7 +282,7 @@ def test_check_lists_readiness_and_warns(home):
         result.output
     )
     assert "templates/ is no longer used" in result.output
-    assert "1 ideas OK" in result.output
+    assert "1 idea OK" in result.output
 
 
 def test_stages_shows_fields_from_the_stages_file(home):
@@ -813,6 +813,30 @@ def test_ls_warns_about_unreadable_files(home):
     assert result.exit_code == 1
     assert "pomo.md cannot be read" in result.output
     assert "fix it with pet edit pomo" in result.output
+
+
+def test_edit_prints_the_error_once_when_not_reopened(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    path = home.ideas / "budget-tracker.md"
+
+    def breaking_edit(filename=None, **kwargs):
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace("title: Budget tracker", "title: Budget: x: y"))
+
+    monkeypatch.setattr(cli.click, "edit", breaking_edit)
+    monkeypatch.setattr(cli.click, "confirm", lambda *args, **kwargs: False)
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: True)
+    result = pet(home, "edit", "budget")
+    assert result.exit_code == 1
+    assert result.output.count("cannot be read") == 1
+    assert "Fix it with pet edit budget-tracker" in result.output
+
+
+def test_set_echoes_the_stored_value(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    assert "title: A b" in pet(home, "set", "budget", "title=  A   b ").output
 
 
 def test_edit_opens_unreadable_file(home, monkeypatch):

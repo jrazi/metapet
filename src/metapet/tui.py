@@ -255,8 +255,11 @@ class PetApp(App[None]):
         if broken and len(broken) != len(self.broken_files):
             count = len(broken)
             self.notify(
-                f"{count} idea file{'' if count == 1 else 's'} could not be read; "
-                "they are listed as unreadable. Press e on one to fix it.",
+                "1 idea file could not be read; it is listed as unreadable. "
+                "Press e on it to fix it."
+                if count == 1
+                else f"{count} idea files could not be read; they are listed as unreadable. "
+                "Press e on one to fix it.",
                 severity="warning",
             )
         self.broken_files = broken
