@@ -281,17 +281,15 @@ def test_promote_warns_about_empty_expected_fields(home):
     assert "status: spec" in idea_text(home, "budget-tracker")
 
 
-def test_check_lists_readiness_and_warns(home):
+def test_check_lists_empty_expected_fields(home):
     pet(home, "init")
     pet(home, "add", "Budget tracker")
     pet(home, "promote", "budget")
-    home.templates.mkdir()
     result = pet(home, "check")
     assert result.exit_code == 0, result.output
     assert "· budget-tracker (sketch): empty: Problem (problem), Rough solution (solution)" in (
         result.output
     )
-    assert "templates/ is no longer used" in result.output
     assert "1 idea OK" in result.output
 
 

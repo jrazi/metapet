@@ -1360,11 +1360,6 @@ def check(ctx: typer.Context) -> None:
     except SchemaError as exc:
         idea_schema = None
         err.print(f"[red]✗[/] {escape(str(exc))}", soft_wrap=True)
-    if store.home.templates.is_dir():
-        err.print(
-            "[yellow]![/] templates/ is no longer used; stage fields now come from "
-            "stages.toml (see README)"
-        )
     if idea_schema is not None:
         for idea in ideas:
             body = sections.parse(idea.body)
