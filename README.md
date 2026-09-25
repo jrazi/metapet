@@ -1,60 +1,68 @@
 # metapet
 
-`pet` is a small command-line tool for keeping pet-project ideas as Markdown files.
-Each idea moves through stages, from a one-line seed to a plan you can build from.
+A small command-line tool for keeping your side-project ideas in one place.
 
-```console
-$ pet add "Plant watering bot" -t hardware
-+ plant-watering-bot  Plant watering bot
-$ pet promote plant
-plant-watering-bot: seed → sketch
-```
+Side-project ideas tend to end up spread across notes apps, chats and browser tabs,
+and most of them are hard to find again when you finally have time to build
+something. metapet keeps each idea as a Markdown file on your computer. Adding one
+takes a few seconds. Later you can come back and fill it in, as the idea grows from
+a rough thought into something you could start building.
 
-## Install
+The command is `pet`.
+
+## Installation
 
 ```sh
 uv tool install metapet
 ```
 
-Or use `pipx install metapet`, or `pip install metapet`. Needs Python 3.11 or newer.
-Upgrade with `uv tool upgrade metapet` or `pipx upgrade metapet`.
+or
+
+```sh
+pipx install metapet
+```
+
+metapet needs Python 3.11 or newer. To try it without installing, run
+`uvx --from metapet pet --help`.
 
 ## Quick start
 
 ```sh
-pet init                                  # create the idea store (once)
-pet add "Plant watering bot" -t hardware  # add an idea
-pet ls                                    # list your ideas
-pet promote plant                         # move it to the next stage
-pet show plant                            # read it
-pet next                                  # suggest what to work on
+pet init                          # create the place where ideas are stored
+pet add "Plant watering bot"      # save an idea with just a name
+pet new                           # add an idea and answer a few questions about it
+pet ls                            # list your ideas
+pet promote plant                 # move an idea to its next stage
+pet                               # open the full-screen view
 ```
 
-`pet ls` hides shipped and shelved ideas unless you pass `--all`.
+You don't have to type the whole id: any part of the id or title that matches only
+one idea works, so `plant` finds `plant-watering-bot`.
 
-You do not have to type the whole id. Any unique part of the id or title works.
-Run `pet` on its own to open the full-screen view.
+## How it works
 
-## Where ideas are stored
+### Stages
 
-Ideas are plain Markdown files in a data directory. pet uses the first of these
-that is set:
+Every idea has a stage:
 
-1. the `--home PATH` option, as in `pet --home ~/ideas ls`
-2. the `METAPET_HOME` environment variable
-3. the default for your system:
-   - Linux: `~/.local/share/metapet`
-   - macOS: `~/Library/Application Support/metapet`
-   - Windows: `%LOCALAPPDATA%\metapet`
+| Stage | Meaning |
+|---|---|
+| seed | a raw thought: a name, maybe a sentence |
+| sketch | thought through for a few minutes |
+| spec | concrete enough to start building from |
+| building | work has started |
+| shipped | done and usable |
+| shelved | put aside on purpose, with a reason |
 
-`pet where` shows the directory in use. Inside it:
+Each stage comes with a few questions, such as "What problem does it solve?" or
+"What is the smallest version you would actually use?". `pet promote` asks them when an idea
+moves to the next stage, and `pet refine` lets you answer them again later. You can
+skip any question. `pet stages` lists the fields of every stage.
 
-```
-ideas/<id>.md    one file per idea
-stages.toml      optional changes to the stages
-```
+### Idea files
 
-An idea file has YAML frontmatter and a Markdown body. You can edit it by hand:
+Each idea is a Markdown file with a little YAML at the top. You can open it in any
+editor, or with `pet edit`:
 
 ```markdown
 ---
@@ -73,28 +81,51 @@ Water the plants when the soil is dry.
 I forget to water them.
 ```
 
-## Stages
+### Full-screen view
 
-`seed → sketch → spec → building → shipped`, or `shelved` at any point.
+`pet` on its own (or `pet ui`) shows your ideas with a preview of the selected one.
 
-| Stage | Meaning |
+| Key | Action |
 |---|---|
-| seed | a raw thought: a title, maybe a one-liner |
-| sketch | thought through for a few minutes |
-| spec | concrete enough to start building from |
-| building | real work has started |
-| shipped | done and usable |
-| shelved | put aside on purpose, with a reason |
+| `/` | filter by words, `status:spec` or `tag:cli` |
+| `a` | add an idea |
+| `p` | promote to the next stage |
+| `r` | answer the idea's questions |
+| `n` | add a note |
+| `s` | shelve |
+| `e` | open in your editor |
+| `q` | quit |
 
-Each stage asks a few questions, such as the problem or the first version's scope.
-`pet promote` asks them when an idea moves on, and `pet refine` asks them again.
-You can skip any question. If a field marked with * in `pet stages` is still empty,
-`pet promote` prints a warning but still moves the idea.
+## Other useful commands
 
-## Customizing stages
+```sh
+pet note plant "Try a capacitive soil sensor"   # add a dated note
+pet set plant excitement=5 +garden             # change a field or add a tag
+pet next                                        # suggest what to work on next
+pet review                                      # go through ideas you haven't looked at in a while
+pet search sensor                               # find ideas
+```
 
-Put a `stages.toml` in the data directory. A stage you define there replaces the
-built-in stage of the same name. For example, to give `sketch` just two fields:
+Run `pet --help` for the full list, and `pet <command> --help` for details.
+
+## Configuration
+
+### Where ideas are stored
+
+pet stores ideas in the first of these that is set:
+
+1. the `--home PATH` option
+2. the `METAPET_HOME` environment variable
+3. the default data folder for your system: `~/.local/share/metapet` on Linux,
+   `~/Library/Application Support/metapet` on macOS and `%LOCALAPPDATA%\metapet`
+   on Windows
+
+`pet where` shows which folder is in use.
+
+### Custom stages
+
+To change the questions, put a `stages.toml` file in that folder. A stage you define
+there replaces the built-in stage with the same name:
 
 ```toml
 [sketch]
@@ -106,86 +137,29 @@ label = "Problem"
 question = "What problem does it solve?"
 kind = "long"
 required = true
-
-[[sketch.fields]]
-key = "vibe"
-label = "Vibe"
-question = "How should it feel to use?"
 ```
 
 The [built-in stages.toml](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
 shows every option. `pet check` reports mistakes in your file.
 
-## Full-screen view
+### Backup
 
-`pet ui`, or `pet` on its own, shows your ideas with a preview of the selected one.
-
-| Key | Action |
-|---|---|
-| `/` | Filter by words, `status:spec` or `tag:cli` (Escape clears it) |
-| `a` | Add an idea |
-| `p` | Promote to the next stage |
-| `r` | Refine: answer questions |
-| `n` | Add a note |
-| `s` | Shelve, with a reason |
-| `x` | Set excitement (1-5) |
-| `e` | Open the file in `$EDITOR` |
-| `q` | Quit |
-
-Shipped and shelved ideas are hidden unless the filter has a `status:` word.
-
-## Backup
-
-pet can keep the data directory in its own git repository:
+pet can keep the folder in its own git repository and sync it with a remote:
 
 ```sh
-pet init --git --remote git@github.com:<you>/<your-ideas-repo>.git
+pet init --git --remote git@github.com:<you>/<your-ideas>.git
 pet sync
 ```
 
-`pet sync` commits, pulls and pushes. You can also point `METAPET_HOME` at a folder
-that Dropbox, iCloud or Syncthing keeps in sync.
+A folder synced by Dropbox, iCloud or Syncthing works too: point `METAPET_HOME` at it.
 
-## Shell completion
+### Shell completion
 
 ```sh
 pet --install-completion
 ```
 
-Then open a new shell. This works in bash, zsh, fish and PowerShell, and completes
-commands, options and idea ids.
-
-## Commands
-
-| Command | What it does |
-|---|---|
-| `pet init` | Create the idea store |
-| `pet add` | Add an idea with just a title |
-| `pet new` | Add an idea and answer its first questions |
-| `pet ls` | List ideas; add `--all` to include shipped and shelved (also `pet list`) |
-| `pet show` | Show one idea |
-| `pet edit` | Open an idea in `$EDITOR` |
-| `pet set` | Change fields, such as `excitement=4` or `+tag` |
-| `pet note` | Add a dated note |
-| `pet rename` | Change an idea's id |
-| `pet rm` | Delete an idea (also `pet delete`) |
-| `pet promote` | Move an idea to its next stage |
-| `pet refine` | Answer an idea's questions again |
-| `pet shelve` | Put an idea aside and record why |
-| `pet review` | Go through ideas you have not looked at for a while |
-| `pet ui` | Open the full-screen view |
-| `pet search` | Find ideas (also `pet find`) |
-| `pet next` | Suggest what to work on next |
-| `pet random` | Show a random seed or sketch |
-| `pet stats` | Count ideas by stage, tag and month |
-| `pet stages` | Show the stages and their fields |
-| `pet check` | Check idea files and `stages.toml` |
-| `pet where` | Show the data directory in use |
-| `pet sync` | Back up with git |
-| `pet export` | Export ideas as a Markdown index, JSON, or both |
-
-Run `pet <command> --help` for options. When piped, list commands print
-tab-separated lines.
+Open a new shell afterwards. Commands, options and idea ids will complete with Tab.
 
 ## Development
 
@@ -194,12 +168,8 @@ git clone https://github.com/jrazi/metapet.git
 cd metapet
 uv sync
 uv run pytest
-uv run ruff check . && uv run ruff format --check .
+uv run pet --help
 ```
-
-`uv run pet` runs the tool from the checkout. In a source checkout, `pet init --local`
-stores ideas in `./data`, which git ignores. pet uses that folder when `--home` and
-`METAPET_HOME` are not set.
 
 ## License
 
