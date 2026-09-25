@@ -116,8 +116,9 @@ adds and removes nothing. `pet check` lists the empty
 expected fields of every idea.
 
 Fill fields by answering questions with `pet refine ID`, with `pet set ID KEY=VALUE`,
-`pet note ID TEXT` or `pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name,
-ignoring case, so files written by older versions keep working.
+`pet note ID TEXT` or `pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name or key,
+ignoring case, so files written by older versions keep working. A `## ` heading typed
+inside a field's answer is changed to `### `, so it stays part of that field.
 
 ### Changing the stages
 
@@ -157,7 +158,7 @@ alias, or key with `_` read as a space). The old `templates/` folder is no longe
 | `pet add TITLE [-t TAG]… [-m NOTE] [--id ID] [-v] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
 | `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--id ID] [-v] [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
 | `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved); also `pet list` |
-| `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment |
+| `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment. `pet edit` also opens a file that cannot be read, so it can be fixed |
 | `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
 | `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields (by key or heading); an empty value clears one. For `notes` and `log`, each value adds a dated item |
 | `pet note ID TEXT` | Add a dated line to the Notes section |
