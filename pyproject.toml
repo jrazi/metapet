@@ -11,6 +11,7 @@ dependencies = [
     "python-frontmatter>=1.1",
     "questionary>=2.1.1",
     "rich>=13.7",
+    "textual>=8.2.8",
     "typer>=0.12",
 ]
 
