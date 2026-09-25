@@ -202,3 +202,12 @@ def test_set_empty_clears_dated_list():
     fields.add_note(idea, S, "one")
     assert apply(idea, "notes=") == ["notes: cleared"]
     assert fields.get(idea, field("notes")) == []
+
+
+def test_normalize_tags():
+    assert fields.normalize_tags(["bot", "bot", "BOT"]) == ["bot"]
+    assert fields.normalize_tags(["Bot", "bot", "Telegram", "", " a  b "], ["telegram"]) == [
+        "Bot",
+        "telegram",
+        "a b",
+    ]

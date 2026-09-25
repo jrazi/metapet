@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from metapet import ids
+from metapet.fields import normalize_tags
 from metapet.model import Idea, IdeaError, clean_title
 from metapet.paths import DataHome
 
@@ -151,6 +152,8 @@ class Store:
         """Create and save an idea; `id` is checked with check_new_id when given."""
         self.require()
         title = clean_title(title)
+        if "tags" in fields:
+            fields["tags"] = normalize_tags(fields["tags"], self.all_tags())
         idea_id = self.check_new_id(id) if id is not None else self.unique_id(title)
         idea = Idea(id=idea_id, title=title, **fields)
         self.save(idea)

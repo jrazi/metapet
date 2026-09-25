@@ -793,3 +793,15 @@ def test_edit_opens_unreadable_file(home, monkeypatch):
     assert result.exit_code == 0, result.output
     assert opened == [str(path)]
     assert "Pomodoro" in pet(home, "show", "pomo").output
+
+
+def test_add_dedupes_tags(home):
+    pet(home, "init")
+    pet(home, "add", "T", "-t", "bot", "-t", "bot", "-t", "BOT")
+    assert idea_text(home, "t").lower().count("bot") == 1
+    pet(home, "add", "Old", "-t", "telegram")
+    pet(home, "add", "U", "-t", "Telegram")
+    assert "- telegram" in idea_text(home, "u") and "Telegram" not in idea_text(home, "u")
+    pet(home, "new", "V", "-t", "TELEGRAM", "-t", "telegram", "--no-input")
+    assert idea_text(home, "v").count("telegram") == 1
+    assert "bot 1" in pet(home, "stats").output

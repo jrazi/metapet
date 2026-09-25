@@ -31,6 +31,17 @@ def _is_list(field: Field) -> bool:
     return field.kind in (Kind.LIST, Kind.TAGS)
 
 
+def normalize_tags(tags: list[str], known: list[str] | None = None) -> list[str]:
+    """Tags once each, ignoring case (first wins), in the spelling of a known tag if any."""
+    spelling = {tag.casefold(): tag for tag in reversed(known or [])}
+    result: dict[str, str] = {}
+    for tag in tags:
+        tag = " ".join(str(tag).split())
+        if tag:
+            result.setdefault(tag.casefold(), spelling.get(tag.casefold(), tag))
+    return list(result.values())
+
+
 # -- reading -------------------------------------------------------------------
 
 
@@ -102,7 +113,9 @@ def _put_frontmatter(idea: Idea, field: Field, value: Value) -> None:
         return
     if field.key == "effort":
         value = Effort(str(value).upper()) if value else None
-    elif field.key in ("tags", "related"):
+    elif field.key == "tags":
+        value = normalize_tags(list(value or []), idea.tags)
+    elif field.key == "related":
         value = list(value or [])
     elif field.key == "title":
         try:
@@ -277,11 +290,12 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
         if items:
             done.append(f"{key}: added {len(items)} item{'' if len(items) == 1 else 's'}")
     for change in changes:
-        wanted = change.value.casefold()
+        tag = " ".join(change.value.split())
+        wanted = tag.casefold()
         present = [t.casefold() for t in idea.tags]
         if change.op == "add_tag" and wanted not in present:
-            idea.tags.append(change.value)
-            done.append(f"tags: +{change.value}")
+            idea.tags.append(tag)
+            done.append(f"tags: +{tag}")
         elif change.op == "remove_tag" and wanted in present:
             idea.tags = [t for t in idea.tags if t.casefold() != wanted]
             done.append(f"tags: -{change.value}")

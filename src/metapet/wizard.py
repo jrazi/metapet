@@ -85,7 +85,8 @@ def _ask(s: Session, idea: Idea, f: Field) -> fields.Value:
     if f.kind == Kind.CHOICE:
         return p.choice(f.question, list(f.choices), hint=f.hint, default=current)
     if f.kind == Kind.TAGS:
-        return p.tags(f.question, hint=f.hint, current=list(current or []), known=s.known_tags)
+        answer = p.tags(f.question, hint=f.hint, current=list(current or []), known=s.known_tags)
+        return fields.normalize_tags(answer, s.known_tags) or None if answer else answer
     answer = p.text(f.question, hint=f.hint, default=str(current or ""))
     return (answer or "").strip() or None
 

@@ -569,7 +569,7 @@ def new(
     summary_key = _summary_key(idea_schema)
     flagged = {
         summary_key: summary,
-        "tags": ",".join(tag) if tag else None,
+        "tags": ",".join(fields.normalize_tags(tag, store.all_tags())) if tag else None,
         "excitement": excitement,
     }
     try:
@@ -1098,7 +1098,7 @@ def stats(ctx: typer.Context) -> None:
         _warn_broken(broken)
         return
     by_status = Counter(i.status for i in ideas)
-    by_tag = Counter(t.lower() for i in ideas for t in i.tags)
+    by_tag = Counter(t for i in ideas for t in {tag.casefold() for tag in i.tags})
     by_month = Counter(i.created.strftime("%Y-%m") for i in ideas)
 
     table = Table(title=f"{len(ideas)} ideas", box=None, show_header=False)
