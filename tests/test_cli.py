@@ -896,3 +896,15 @@ def test_export_missing_dir_is_error(home, tmp_path):
     result = pet(home, "export", "--md", str(missing))
     assert result.exit_code == 1
     assert result.output == f"error: directory {missing.parent} does not exist\n"
+
+
+def test_shelve_twice_says_replaced(home):
+    pet(home, "init")
+    pet(home, "add", "Dash")
+    pet(home, "shelve", "dash", "Too many dashboards")
+    result = pet(home, "shelve", "dash", "again")
+    assert "dash was already shelved (Too many dashboards); reason replaced" in result.output
+    assert idea_text(home, "dash").count("Shelved:") == 2
+    pet(home, "promote", "dash", "--to", "sketch", "--no-input")
+    assert "Back from the shelf (it was shelved: again)" in idea_text(home, "dash")
+    assert pet(home, "shelve", "dash", "").exit_code == 1

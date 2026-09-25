@@ -9,7 +9,7 @@ import datetime as dt
 from dataclasses import dataclass
 
 from metapet import fields, stages, wizard
-from metapet.model import Idea, IdeaError, Status
+from metapet.model import Idea, IdeaError
 from metapet.schema import Field, Kind, Storage
 
 # Used when a custom stages.toml has no excitement field.
@@ -85,8 +85,7 @@ def _act(s: wizard.Session, idea: Idea, action: str) -> None:
     elif action == "shelve":
         reason = (p.text("Why are you shelving it?") or "").strip()
         if reason:
-            stages.move(idea, Status.SHELVED, s.schema)
-            idea.shelved_reason = reason
+            stages.shelve(idea, reason, s.schema, s.today)
 
 
 def _review_one(s: wizard.Session, idea: Idea) -> bool:

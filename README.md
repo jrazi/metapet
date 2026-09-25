@@ -163,7 +163,7 @@ alias, or key with `_` read as a space). The old `templates/` folder is no longe
 | `pet rename ID [NEW_ID]` | Change an idea's id and file name; without `NEW_ID`, make it from the title |
 | `pet promote ID [--to STATUS] [-v] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
 | `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
-| `pet shelve ID REASON` | Park an idea, remembering why |
+| `pet shelve ID REASON` | Park an idea, remembering why (the reason is also added to Notes with the date) |
 | `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
 | `pet ui` · `pet` | Browse and change ideas in a full-screen view (bare `pet` outside a terminal prints help) |
 | `pet search QUERY… [-a]` | Find ideas whose id, title, tags or text contain all the words; `status:NAME` and `tag:NAME` work as in the `pet ui` filter; `-a` includes shipped/shelved; also `pet find` |

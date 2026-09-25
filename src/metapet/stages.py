@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 from metapet import fields, sections
 from metapet.model import Idea, Status
 from metapet.schema import LIFECYCLE, Field, Schema, Storage
 
-__all__ = ["LIFECYCLE", "before", "describe", "gaps", "move", "promote", "statuses_between"]
+__all__ = [
+    "LIFECYCLE",
+    "before",
+    "describe",
+    "gaps",
+    "move",
+    "promote",
+    "shelve",
+    "statuses_between",
+]
 
 
 def statuses_between(old: Status, new: Status) -> list[Status]:
@@ -47,12 +58,31 @@ def move(idea: Idea, new: Status, schema: Schema) -> None:
     idea.touch()
 
 
-def promote(idea: Idea, target: Status, schema: Schema) -> None:
-    """Move an idea, forgetting the shelved reason when it comes back from the shelf."""
+def promote(idea: Idea, target: Status, schema: Schema, today: dt.date | None = None) -> None:
+    """Move an idea. One that comes back from the shelf keeps its reason in a dated note."""
     old = idea.status
-    move(idea, target, schema)
     if old == Status.SHELVED and target != Status.SHELVED:
+        reason = idea.shelved_reason
+        note = f"Back from the shelf (it was shelved: {reason})" if reason else "Back from the shelf"
+        fields.add_note(idea, schema, note, today)
         idea.shelved_reason = None
+    move(idea, target, schema)
+
+
+def shelve(idea: Idea, reason: str, schema: Schema, today: dt.date | None = None) -> str | None:
+    """Shelve an idea with a reason, also kept as a dated note.
+
+    Returns the previous reason when the idea was already shelved. Raises ValueError for a
+    blank reason.
+    """
+    reason = " ".join(reason.split())
+    if not reason:
+        raise ValueError("give a reason")
+    previous = idea.shelved_reason if idea.status == Status.SHELVED else None
+    fields.add_note(idea, schema, f"Shelved: {reason}", today)
+    move(idea, Status.SHELVED, schema)
+    idea.shelved_reason = reason
+    return previous
 
 
 def gaps(idea: Idea, schema: Schema, upto: Status | None) -> list[Field]:

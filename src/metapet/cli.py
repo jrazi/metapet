@@ -978,15 +978,25 @@ def shelve(
 ) -> None:
     """Shelve an idea, keeping the reason for future you.
 
-    Shelved ideas are hidden from ls and next (see them with ls -a) and gain a Retro section.
-    Bring one back with: pet promote ID --to STAGE.
+    Shelved ideas are hidden from ls and next (see them with ls -a) and gain a Retro section. The reason is also added to Notes, with the date. Bring one back with: pet promote ID --to STAGE.
     """
     store = _store(ctx)
     idea = _find(store, idea_id)
-    stages.move(idea, Status.SHELVED, _schema(ctx))
-    idea.shelved_reason = reason
+    try:
+        previous = stages.shelve(idea, reason, _schema(ctx))
+    except ValueError as exc:
+        _fail(escape(str(exc)))
     store.save(idea)
-    console.print(f"{escape(idea.id)}: {_status(Status.SHELVED)}  [dim]{escape(reason)}[/]")
+    if previous is not None:
+        console.print(
+            f"{escape(idea.id)} was already shelved ({escape(previous)}); reason replaced",
+            soft_wrap=True,
+        )
+    else:
+        console.print(
+            f"{escape(idea.id)}: {_status(Status.SHELVED)}  [dim]{escape(idea.shelved_reason or '')}[/]",
+            soft_wrap=True,
+        )
 
 
 @app.command(

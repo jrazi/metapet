@@ -1,3 +1,7 @@
+import datetime as dt
+
+import pytest
+
 from metapet import schema, stages
 from metapet.model import Idea, Status
 from metapet.schema import Field
@@ -92,3 +96,21 @@ def test_describe():
     assert [status for status, _, _ in described][-1] == Status.SHELVED
     assert described[1][1] == "thought through for a few minutes"
     assert [f.key for f in described[1][2]][:2] == ["problem", "audience"]
+
+
+def test_shelve_adds_note_and_rejects_blank():
+    idea = Idea(id="x", title="X")
+    assert stages.shelve(idea, "Too many dashboards", S, dt.date(2026, 1, 2)) is None
+    assert idea.status == Status.SHELVED and idea.shelved_reason == "Too many dashboards"
+    assert "- 2026-01-02: Shelved: Too many dashboards" in idea.body
+    assert stages.shelve(idea, "again", S, dt.date(2026, 1, 3)) == "Too many dashboards"
+    assert idea.body.count("Shelved:") == 2
+    with pytest.raises(ValueError, match="give a reason"):
+        stages.shelve(idea, "  ", S)
+
+
+def test_unshelve_keeps_reason_in_notes():
+    idea = Idea(id="x", title="X", status=Status.SHELVED, shelved_reason="later")
+    stages.promote(idea, Status.SKETCH, S, dt.date(2026, 1, 2))
+    assert "- 2026-01-02: Back from the shelf (it was shelved: later)" in idea.body
+    assert idea.shelved_reason is None

@@ -352,8 +352,7 @@ class PetApp(App[None]):
 
         def done(reason: str | None) -> None:
             if reason:
-                stages.move(idea, Status.SHELVED, self.schema)
-                idea.shelved_reason = reason
+                stages.shelve(idea, reason, self.schema)
                 self.store.save(idea)
                 self.reload()
                 self.notify(f"{idea.id} shelved. Type status:shelved in the filter to see it.")
