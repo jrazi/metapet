@@ -23,6 +23,15 @@ pet init
 
 Or run it without installing: `uv run pet …`.
 
+### Tab completion
+
+```sh
+pet --install-completion   # bash, zsh, fish or PowerShell; then open a new shell
+```
+
+Completes commands, options and idea ids (`pet show sp<TAB>`); zsh and fish also
+show each idea's title. `pet --help` and `pet promote --help` explain the lifecycle.
+
 ## Where ideas live
 
 The repository holds **only the tool**. Your ideas are stored in a separate data
@@ -79,7 +88,9 @@ already have:
 | building | Repo · Log |
 | shipped / shelved | Retro |
 
-To customise a stage, drop your own `sketch.md`, `spec.md`, `building.md` or
+The structure is deliberately loose: only the frontmatter is validated
+(`pet check`). The added sections are prompts, not rules; fill them, delete them
+or add your own. To customise a stage, drop your own `sketch.md`, `spec.md`, `building.md` or
 `retro.md` into `<data home>/templates/`.
 
 ## Commands
