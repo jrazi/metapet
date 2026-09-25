@@ -1,14 +1,16 @@
 # metapet
 
-A small command-line tool for keeping your side-project ideas in one place.
+[![PyPI](https://img.shields.io/pypi/v/metapet)](https://pypi.org/project/metapet/)
+[![Python](https://img.shields.io/pypi/pyversions/metapet)](https://pypi.org/project/metapet/)
+[![CI](https://github.com/jrazi/metapet/actions/workflows/ci.yml/badge.svg)](https://github.com/jrazi/metapet/actions/workflows/ci.yml)
+[![License](https://img.shields.io/pypi/l/metapet)](https://github.com/jrazi/metapet/blob/main/LICENSE)
 
-Side-project ideas tend to end up spread across notes apps, chats and browser tabs,
-and most of them are hard to find again when you finally have time to build
-something. metapet keeps each idea as a Markdown file on your computer. Adding one
-takes a few seconds. Later you can come back and fill it in, as the idea grows from
-a rough thought into something you could start building.
+metapet is a command-line tool, `pet`, for keeping notes on side-project ideas. Each
+idea is a Markdown file with YAML frontmatter. An idea has a stage (seed, sketch,
+spec, building, shipped or shelved), and moving it to a new stage asks that stage's
+questions, such as what problem it solves or how it could work.
 
-The command is `pet`.
+![The full-screen view of metapet](https://raw.githubusercontent.com/jrazi/metapet/main/docs/screenshot.svg)
 
 ## Installation
 
@@ -16,150 +18,120 @@ The command is `pet`.
 uv tool install metapet
 ```
 
-or
+or `pipx install metapet`. metapet needs Python 3.11 or newer and installs a command
+called `pet`. To try it without installing, run `uvx --from metapet pet`.
 
-```sh
-pipx install metapet
+## Usage
+
+Run `pet init` once to create the data folder. Then add an idea with a name, a tag
+and a short description:
+
+```console
+$ pet add "Nearby concert alerts" -t music \
+    -m "A small service that checks which artists I listen to on Spotify and emails me when one of them announces a show in my city."
++ nearby-concert-alerts  Nearby concert alerts
 ```
 
-metapet needs Python 3.11 or newer. To try it without installing, run
-`uvx --from metapet pet --help`.
-
-## Quick start
-
-```sh
-pet init                          # create the place where ideas are stored
-pet add "Plant watering bot"      # save an idea with just a name
-pet new                           # add an idea and answer a few questions about it
-pet ls                            # list your ideas
-pet promote plant                 # move an idea to its next stage
-pet                               # open the full-screen view
-```
-
-You don't have to type the whole id: any part of the id or title that matches only
-one idea works, so `plant` finds `plant-watering-bot`.
-
-## How it works
+The idea is saved as `nearby-concert-alerts.md`. `pet new` asks for the same things
+one by one instead.
 
 ### Stages
 
-Every idea has a stage:
+`pet promote` moves an idea to its next stage and asks that stage's questions. Enter
+skips a question.
 
-| Stage | Meaning |
-|---|---|
-| seed | a raw thought: a name, maybe a sentence |
-| sketch | thought through for a few minutes |
-| spec | concrete enough to start building from |
-| building | work has started |
-| shipped | done and usable |
-| shelved | put aside on purpose, with a reason |
+```console
+$ pet promote concert
+? What problem does it solve? I find out about shows after they sell out
+? Who is it for? Me and anyone who goes to a lot of concerts
+? How could it work, roughly? Read my top artists from the Spotify API and check a concert listings API once a week
+? What is it worth if it exists?
+? Why is now a good time for it?
+nearby-concert-alerts: seed → sketch
+```
 
-Each stage comes with a few questions, such as "What problem does it solve?" or
-"What is the smallest version you would actually use?". `pet promote` asks them when an idea
-moves to the next stage, and `pet refine` lets you answer them again later. You can
-skip any question. `pet stages` lists the fields of every stage.
+Any part of an id that matches only one idea works, so `concert` is enough.
+`pet refine concert` changes the answers later.
 
-### Idea files
+### Notes and ratings
 
-Each idea is a Markdown file with a little YAML at the top. You can open it in any
-editor, or with `pet edit`:
+```sh
+pet note concert "Songkick and Bandsintown both have APIs for concert listings"
+pet set concert excitement=5 effort=M
+```
+
+### Listing ideas
+
+```console
+$ pet ls
+id                     title                  status  exc  tags     imp  effort
+recipe-box             Recipe box             seed      3  cooking       M
+reading-tracker        Reading tracker        seed      2  books         M
+nearby-concert-alerts  Nearby concert alerts  sketch    5  music         M
+family-grocery-list    Family grocery list    seed      4  mobile     4  M
+
+$ pet next
+id                     title                  status  score  exc  tags     imp
+nearby-concert-alerts  Nearby concert alerts  sketch   4.25    5  music
+family-grocery-list    Family grocery list    seed     4.00    4  mobile     4
+recipe-box             Recipe box             seed     3.00    3  cooking
+```
+
+`pet next` ranks ideas by excitement plus impact, divided by effort. `pet show`,
+`pet search` and `pet review` cover the rest, and `pet` on its own opens the
+full-screen view shown above. See `pet --help` for all commands.
+
+## Idea files
+
+Each idea is a Markdown file that you can also edit by hand, or with `pet edit`.
+This is `nearby-concert-alerts.md` after the commands above, without its two empty
+sections:
 
 ```markdown
 ---
-id: plant-watering-bot
-title: Plant watering bot
+id: nearby-concert-alerts
+title: Nearby concert alerts
 status: sketch
 created: 2026-09-25
 updated: 2026-09-25
 tags:
-- hardware
-excitement: 4
+- music
+excitement: 5
+effort: M
 ---
-Water the plants when the soil is dry.
+
+A small service that checks which artists I listen to on Spotify and emails me when one of them announces a show in my city.
 
 ## Problem
-I forget to water them.
+I find out about shows after they sell out
+
+## Who it's for
+Me and anyone who goes to a lot of concerts
+
+## Rough solution
+Read my top artists from the Spotify API and check a concert listings API once a week
+
+## Notes
+- 2026-09-25: Songkick and Bandsintown both have APIs for concert listings
 ```
-
-### Full-screen view
-
-`pet` on its own (or `pet ui`) shows your ideas with a preview of the selected one.
-
-| Key | Action |
-|---|---|
-| `/` | filter by words, `status:spec` or `tag:cli` |
-| `a` | add an idea |
-| `p` | promote to the next stage |
-| `r` | answer the idea's questions |
-| `n` | add a note |
-| `s` | shelve |
-| `e` | open in your editor |
-| `q` | quit |
-
-## Other useful commands
-
-```sh
-pet note plant "Try a capacitive soil sensor"   # add a dated note
-pet set plant excitement=5 +garden             # change a field or add a tag
-pet next                                        # suggest what to work on next
-pet review                                      # go through ideas you haven't looked at in a while
-pet search sensor                               # find ideas
-```
-
-Run `pet --help` for the full list, and `pet <command> --help` for details.
 
 ## Configuration
 
-### Where ideas are stored
+**Data folder.** Ideas are kept in `~/.local/share/metapet` on Linux,
+`~/Library/Application Support/metapet` on macOS and `%LOCALAPPDATA%\metapet` on
+Windows. Set `METAPET_HOME` or pass `--home PATH` to use another folder.
+`pet where` shows the folder in use.
 
-pet stores ideas in the first of these that is set:
+**Custom stages.** A `stages.toml` in the data folder replaces the questions of any
+stage. The [built-in file](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
+shows the format, and `pet check` reports mistakes.
 
-1. the `--home PATH` option
-2. the `METAPET_HOME` environment variable
-3. the default data folder for your system: `~/.local/share/metapet` on Linux,
-   `~/Library/Application Support/metapet` on macOS and `%LOCALAPPDATA%\metapet`
-   on Windows
+**Backup.** `pet init --git --remote <url>` makes the folder a git repository, and
+`pet sync` commits and pushes it. A folder synced by Dropbox, iCloud or Syncthing
+works too.
 
-`pet where` shows which folder is in use.
-
-### Custom stages
-
-To change the questions, put a `stages.toml` file in that folder. A stage you define
-there replaces the built-in stage with the same name:
-
-```toml
-[sketch]
-meaning = "thought through for a few minutes"
-
-[[sketch.fields]]
-key = "problem"
-label = "Problem"
-question = "What problem does it solve?"
-kind = "long"
-required = true
-```
-
-The [built-in stages.toml](https://github.com/jrazi/metapet/blob/main/src/metapet/stages.toml)
-shows every option. `pet check` reports mistakes in your file.
-
-### Backup
-
-pet can keep the folder in its own git repository and sync it with a remote:
-
-```sh
-pet init --git --remote git@github.com:<you>/<your-ideas>.git
-pet sync
-```
-
-A folder synced by Dropbox, iCloud or Syncthing works too: point `METAPET_HOME` at it.
-
-### Shell completion
-
-```sh
-pet --install-completion
-```
-
-Open a new shell afterwards. Commands, options and idea ids will complete with Tab.
+**Shell completion.** `pet --install-completion` adds Tab completion for commands and
+idea ids in bash, zsh, fish and PowerShell.
 
 ## Development
 
@@ -168,9 +140,8 @@ git clone https://github.com/jrazi/metapet.git
 cd metapet
 uv sync
 uv run pytest
-uv run pet --help
 ```
 
 ## License
 
-MIT. See [LICENSE](https://github.com/jrazi/metapet/blob/main/LICENSE).
+[MIT](https://github.com/jrazi/metapet/blob/main/LICENSE)

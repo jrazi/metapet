@@ -1,7 +1,7 @@
 [project]
 name = "metapet"
 version = "0.1.0"
-description = "A small command-line tool for keeping your side-project ideas in one place."
+description = "A command-line tool for keeping notes on side-project ideas as Markdown files."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -54,7 +54,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
-exclude = [".github", "uv.lock"]
+exclude = [".github", "docs", "uv.lock"]
 
 [tool.ruff]
 line-length = 100
