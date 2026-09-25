@@ -150,6 +150,7 @@ def _ideas_table(ideas: list[Idea], extra: dict[str, list[str]] | None = None) -
     table.add_column("title")
     table.add_column("status")
     table.add_column("exc", justify="right")
+    table.add_column("imp", justify="right")
     table.add_column("effort")
     table.add_column("tags", style="dim")
     table.add_column("created", style="dim")
@@ -161,6 +162,7 @@ def _ideas_table(ideas: list[Idea], extra: dict[str, list[str]] | None = None) -
             idea.title,
             _status(idea.status),
             str(idea.excitement or ""),
+            str(idea.impact or ""),
             idea.effort.value if idea.effort else "",
             ", ".join(idea.tags),
             idea.created.isoformat(),
@@ -169,13 +171,21 @@ def _ideas_table(ideas: list[Idea], extra: dict[str, list[str]] | None = None) -
     return table
 
 
+def _stars(value: int) -> str:
+    return f"{'★' * value}{'☆' * (5 - value)}"
+
+
 def _print_idea(idea: Idea) -> None:
     meta = [f"{_status(idea.status)}  [dim]created {idea.created}[/]"]
     if idea.updated:
         meta[0] += f" [dim]· updated {idea.updated}[/]"
+    if idea.reviewed:
+        meta[0] += f" [dim]· reviewed {idea.reviewed}[/]"
     details = []
     if idea.excitement:
-        details.append(f"excitement {'★' * idea.excitement}{'☆' * (5 - idea.excitement)}")
+        details.append(f"excitement {_stars(idea.excitement)}")
+    if idea.impact:
+        details.append(f"impact {_stars(idea.impact)}")
     if idea.effort:
         details.append(f"effort {idea.effort.value}")
     if idea.tags:
@@ -304,7 +314,7 @@ def list_ideas(
     ] = None,
     tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Filter by tag.")] = None,
     sort: Annotated[
-        str, typer.Option(help="Sort by: created, excitement, score, title.")
+        str, typer.Option(help="Sort by: created, excitement, impact, score, title.")
     ] = "created",
     all_: Annotated[
         bool, typer.Option("--all", "-a", help="Include shipped and shelved ideas.")
@@ -325,6 +335,7 @@ def list_ideas(
     keys = {
         "created": lambda i: (i.created, i.id),
         "excitement": lambda i: (i.excitement or 0, i.created),
+        "impact": lambda i: (i.impact or 0, i.created),
         "score": lambda i: (scoring.score(i), i.created),
         "title": lambda i: i.title.lower(),
     }
@@ -437,7 +448,12 @@ def next_(
     ctx: typer.Context,
     count: Annotated[int, typer.Option("--count", "-n", help="How many to suggest.")] = 3,
 ) -> None:
-    """Suggest what to work on: excited, cheap, further along, long-waiting first."""
+    """Suggest what to work on next.
+
+    Ranks by (excitement + impact) / effort weight (S=1, M=2, L=4, XL=8; missing values count
+    as 3, 3 and M), plus up to 0.75 for later stages and up to 0.5 for ideas that have waited
+    six months.
+    """
     ranked = scoring.rank(_store(ctx).all())[:count]
     if not ranked:
         console.print('[dim]No live ideas. Capture one with[/] pet add "..."')
