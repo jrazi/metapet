@@ -12,3 +12,14 @@ dist/
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.tox/
+
+# Local environment, editors and OS files
+.env
+.idea/
+.vscode/
+*.swp
+.DS_Store
