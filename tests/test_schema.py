@@ -140,7 +140,9 @@ def test_duplicate_key_across_stages_rejected(home):
         home,
         '[sketch]\n[[sketch.fields]]\nkey = "notes"\nlabel = "Scribbles"\nquestion = "Q?"\n',
     )
-    with pytest.raises(SchemaError, match=r"field 'notes' is defined in both \[sketch\] and \[any\]"):
+    with pytest.raises(
+        SchemaError, match=r"field 'notes' is defined in both \[sketch\] and \[any\]"
+    ):
         schema.load(home)
 
 

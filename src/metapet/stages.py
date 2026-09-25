@@ -63,7 +63,9 @@ def promote(idea: Idea, target: Status, schema: Schema, today: dt.date | None = 
     old = idea.status
     if old == Status.SHELVED and target != Status.SHELVED:
         reason = idea.shelved_reason
-        note = f"Back from the shelf (it was shelved: {reason})" if reason else "Back from the shelf"
+        note = (
+            f"Back from the shelf (it was shelved: {reason})" if reason else "Back from the shelf"
+        )
         fields.add_note(idea, schema, note, today)
         idea.shelved_reason = None
     move(idea, target, schema)

@@ -46,8 +46,7 @@ def resolve_long(
             edited = (edit or click.edit)(text=current, extension=".md")
         except click.ClickException as exc:
             notify(
-                f"Could not open the editor: {exc.format_message()}. "
-                "Type the answer here instead."
+                f"Could not open the editor: {exc.format_message()}. Type the answer here instead."
             )
             return ASK_AGAIN
         if edited is None or not edited.strip() or edited.strip() == current.strip():

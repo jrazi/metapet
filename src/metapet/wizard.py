@@ -207,9 +207,7 @@ def ask_name(
     same = s.same_title(title)
     if same:
         listed = ", ".join(f"{idea.id} ({idea.status.value})" for idea in same)
-        question = (
-            f"An idea with this name already exists: {listed}. Create another one anyway?"
-        )
+        question = f"An idea with this name already exists: {listed}. Create another one anyway?"
         if not s.prompter.confirm(question, default=False):
             s.prompter.message(f'Nothing added. Add to it with pet note {same[0].id} "..."')
             return None

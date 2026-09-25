@@ -226,7 +226,9 @@ def _problem(key: str, value: Any, exc: Exception) -> str:
     if key == "effort":
         return f"'{value}' must be S, M, L or XL"
     if key in ("excitement", "impact"):
-        return str(exc) if isinstance(exc, _ScaleError) else f"'{value}' is not a number from 1 to 5"
+        return (
+            str(exc) if isinstance(exc, _ScaleError) else f"'{value}' is not a number from 1 to 5"
+        )
     return str(exc)
 
 

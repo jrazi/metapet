@@ -274,9 +274,7 @@ class PetApp(App[None]):
         words = query.casefold().split()
         broken = [b for b in self.broken_files if all(w in b.path.name.casefold() for w in words)]
         self.shown = [*broken, *views.filter_ideas(self.ideas, query)]
-        status_width = max(
-            [len("status"), *(len(_status_label(item)) for item in self.shown)]
-        )
+        status_width = max([len("status"), *(len(_status_label(item)) for item in self.shown)])
         widths = [status_width, 3, 3, len("effort")]
         # Each column has one cell of padding on both sides; leave room for a scrollbar.
         spare = table.size.width - sum(w + 2 for w in widths) - 2 - SCROLLBAR
@@ -288,9 +286,7 @@ class PetApp(App[None]):
             if isinstance(item, BrokenFile):
                 title = Text(item.path.name)
                 title.truncate(title_width, overflow="ellipsis")
-                table.add_row(
-                    title, Text(UNREADABLE, style="bold red"), "", "", "", key=_key(item)
-                )
+                table.add_row(title, Text(UNREADABLE, style="bold red"), "", "", "", key=_key(item))
                 continue
             title = Text(item.title)
             title.truncate(title_width, overflow="ellipsis")

@@ -42,7 +42,9 @@ def visible_body(idea: Idea, schema: Schema) -> tuple[str, list[str]]:
         if not sections.is_empty(section.content):
             kept.append(section)
             continue
-        field = next((f for f in schema.section_fields() if f.matches_heading(section.heading)), None)
+        field = next(
+            (f for f in schema.section_fields() if f.matches_heading(section.heading)), None
+        )
         if field is None:
             empty.append(section.heading)
         else:

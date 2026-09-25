@@ -483,8 +483,15 @@ def test_brackets_in_titles_and_tags_are_shown_literally(home):
     pet(home, "add", "Regex tester [/]")
     pet(home, "add", "Todo [bold] app", "-t", "[red]")
     outputs = {}
-    for args in (["ls"], ["next"], ["show", "regex"], ["show", "todo"], ["search", "todo"],
-                 ["stats"], ["random"]):
+    for args in (
+        ["ls"],
+        ["next"],
+        ["show", "regex"],
+        ["show", "todo"],
+        ["search", "todo"],
+        ["stats"],
+        ["random"],
+    ):
         result = pet(home, *args)
         assert result.exit_code == 0, (args, result.output)
         outputs[args[0] + " " + " ".join(args[1:])] = result.output
@@ -771,8 +778,7 @@ def test_ls_warns_about_unreadable_files(home):
         result = pet(home, *args)
         assert result.exit_code == 0, (args, result.output)
         assert (
-            "warning: 1 idea file could not be read (pet check shows why): pomo.md"
-            in result.output
+            "warning: 1 idea file could not be read (pet check shows why): pomo.md" in result.output
         ), args
     result = pet(home, "show", "pomo")
     assert result.exit_code == 1

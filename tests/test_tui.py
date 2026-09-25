@@ -297,7 +297,9 @@ def test_unreadable_file_is_listed_and_editable(store, monkeypatch):
     path = store.home.ideas / "pomo.md"
     path.write_text("---\ntitle: [unclosed\n---\n")
     edited = []
-    monkeypatch.setattr("metapet.tui.click.edit", lambda filename=None, **kw: edited.append(filename))
+    monkeypatch.setattr(
+        "metapet.tui.click.edit", lambda filename=None, **kw: edited.append(filename)
+    )
     app, _ = make_app(store)
 
     async def test(pilot):
@@ -355,7 +357,9 @@ def test_footer_shows_filter_and_quit_at_80(store):
     app, _ = make_app(store)
 
     async def test(pilot):
-        shown = [b.binding.description for b in app.screen.active_bindings.values() if b.binding.show]
+        shown = [
+            b.binding.description for b in app.screen.active_bindings.values() if b.binding.show
+        ]
         assert shown[:2] == ["Filter", "Quit"]
         assert not app.ENABLE_COMMAND_PALETTE
 

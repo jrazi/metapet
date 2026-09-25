@@ -1,7 +1,6 @@
 import io
 
 import click
-
 import pytest
 from prompt_toolkit.document import Document
 from prompt_toolkit.input import create_pipe_input
@@ -106,7 +105,9 @@ def test_items_keep_wording_singular():
     out = io.StringIO()
     with create_pipe_input() as pipe:
         pipe.send_text("n" + ENTER + ENTER)
-        prompter = QuestionaryPrompter(Console(file=out, width=200), input=pipe, output=DummyOutput())
+        prompter = QuestionaryPrompter(
+            Console(file=out, width=200), input=pipe, output=DummyOutput()
+        )
         assert prompter.items("Features?", current=["a"], clear="pet set x features=") is None
     assert "No items given; kept the 1 item. Clear the list with pet set x features=." in (
         out.getvalue()
@@ -134,7 +135,9 @@ def test_long_falls_back_when_editor_fails():
 
     notes = []
     assert resolve_long("e", "", edit=failing, notify=notes.append) is ASK_AGAIN
-    assert notes == ["Could not open the editor: vim: Editing failed. Type the answer here instead."]
+    assert notes == [
+        "Could not open the editor: vim: Editing failed. Type the answer here instead."
+    ]
 
 
 def test_long_asks_again_after_editor_failure(monkeypatch):

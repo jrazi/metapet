@@ -42,7 +42,6 @@ from metapet.prompter import Prompter
 from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import BrokenFile, IdeaLookupError, Store
 
-
 T = TypeVar("T")
 
 
@@ -106,7 +105,9 @@ def main(
     ctx: typer.Context,
     home: Annotated[
         str | None,
-        typer.Option("--home", metavar="PATH", help="Data directory to use (overrides $METAPET_HOME)."),
+        typer.Option(
+            "--home", metavar="PATH", help="Data directory to use (overrides $METAPET_HOME)."
+        ),
     ] = None,
 ) -> None:
     ctx.obj = paths.resolve(home)
@@ -256,6 +257,7 @@ IdOption = Annotated[
         "hyphens).",
     ),
 ]
+
 
 class SortKey(StrEnum):
     CREATED = "created"
@@ -464,7 +466,8 @@ def init(
         bool, typer.Option("--git", help="Make the store a git repo, for `pet sync` backups.")
     ] = False,
     remote: Annotated[
-        str | None, typer.Option("--remote", metavar="URL", help="Git remote URL for backups (implies --git).")
+        str | None,
+        typer.Option("--remote", metavar="URL", help="Git remote URL for backups (implies --git)."),
     ] = None,
 ) -> None:
     """Create the idea store."""
@@ -506,8 +509,12 @@ def where(ctx: typer.Context) -> None:
 def add(
     ctx: typer.Context,
     title: Annotated[str, typer.Argument(metavar="TITLE", help=TITLE_HELP)],
-    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", metavar="TAG", help="Tag (repeatable).")] = None,
-    note: Annotated[str | None, typer.Option("--note", "-m", metavar="TEXT", help="One-line description.")] = None,
+    tag: Annotated[
+        list[str] | None, typer.Option("--tag", "-t", metavar="TAG", help="Tag (repeatable).")
+    ] = None,
+    note: Annotated[
+        str | None, typer.Option("--note", "-m", metavar="TEXT", help="One-line description.")
+    ] = None,
     interactive: Annotated[
         bool,
         typer.Option(
@@ -561,9 +568,12 @@ def new(
     ctx: typer.Context,
     title: Annotated[str | None, typer.Argument(metavar="[TITLE]", help=TITLE_HELP)] = None,
     summary: Annotated[
-        str | None, typer.Option("--summary", "-m", metavar="TEXT", help="Describe it in one sentence.")
+        str | None,
+        typer.Option("--summary", "-m", metavar="TEXT", help="Describe it in one sentence."),
     ] = None,
-    tag: Annotated[list[str] | None, typer.Option("--tag", "-t", metavar="TAG", help="Tag (repeatable).")] = None,
+    tag: Annotated[
+        list[str] | None, typer.Option("--tag", "-t", metavar="TAG", help="Tag (repeatable).")
+    ] = None,
     excitement: Annotated[
         int | None,
         typer.Option(
@@ -682,7 +692,8 @@ def _shorten_long_title(title: str, summary: str | None, keep: bool) -> tuple[st
 def list_ideas(
     ctx: typer.Context,
     status: Annotated[
-        list[Status] | None, typer.Option("--status", "-s", help="Only ideas at this status (repeatable).")
+        list[Status] | None,
+        typer.Option("--status", "-s", help="Only ideas at this status (repeatable)."),
     ] = None,
     tag: Annotated[
         list[str] | None,
@@ -729,7 +740,9 @@ def list_ideas(
     elif not ideas:
         console.print("No ideas match these filters." if status or tag else "No live ideas.")
     else:
-        extra = {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == SortKey.SCORE else None
+        extra = (
+            {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == SortKey.SCORE else None
+        )
         _print_ideas(ideas, extra)
     if hidden and console.is_terminal:
         what = "idea" if hidden == 1 else "ideas"
@@ -798,7 +811,10 @@ def _edit_file(path: Path) -> None:
                 err.print(f"[red]error:[/] {problem}", soft_wrap=True)
                 if click.confirm("Open it again to fix it?", default=True):
                     continue
-            _fail(f"{problem}\nFix it with pet edit {escape(path.stem)}; pet check lists the problems.")
+            _fail(
+                f"{problem}\nFix it with pet edit {escape(path.stem)}; "
+                "pet check lists the problems."
+            )
         if idea.id != path.stem:
             err.print(
                 f"[yellow]warning:[/] the id in {escape(path.name)} is '{escape(idea.id)}', "
@@ -880,7 +896,8 @@ def rename(
 ) -> None:
     """Change an idea's id and file name.
 
-    Other ideas that list the old id under related are updated. After changing the title with pet set ID title=..., run pet rename ID to make the id match it.
+    Other ideas that list the old id under related are updated. After changing the title
+    with pet set ID title=..., run pet rename ID to make the id match it.
     """
     store = _store(ctx)
     idea = _find(store, idea_id)
@@ -908,7 +925,9 @@ def rm(
 ) -> None:
     """Delete an idea.
 
-    Other ideas that list it under related are updated. In a terminal, asks first; otherwise pass --yes. If the store is a git repository (pet init --git), the file stays in its history.
+    Other ideas that list it under related are updated. In a terminal, asks first; otherwise
+    pass --yes. If the store is a git repository (pet init --git), the file stays in its
+    history.
     """
     store = _store(ctx)
     idea = _find(store, idea_id)
@@ -975,7 +994,8 @@ def promote(
     if gaps:
         labels = escape(_label_keys(gaps))
         err.print(
-            f"[yellow]warning:[/] still empty: {labels} (fill them with pet refine {escape(idea.id)})",
+            f"[yellow]warning:[/] still empty: {labels} "
+            f"(fill them with pet refine {escape(idea.id)})",
             soft_wrap=True,
         )
 
@@ -991,9 +1011,9 @@ def refine(
 ) -> None:
     """Answer an idea's questions again, or fill the ones you skipped.
 
-    Without FIELD, pick fields from a list (✓ answered, · empty, * expected) until you choose Done. Only
-    fields of the idea's stage and the stages before it are offered. The stage does not
-    change. Needs a terminal.
+    Without FIELD, pick fields from a list (✓ answered, · empty, * expected) until you
+    choose Done. Only fields of the idea's stage and the stages before it are offered. The
+    stage does not change. Needs a terminal.
     """
     store = _store(ctx)
     idea_schema = _schema(ctx)
@@ -1020,7 +1040,9 @@ def shelve(
 ) -> None:
     """Shelve an idea, keeping the reason for future you.
 
-    Shelved ideas are hidden from ls and next (see them with ls -a) and gain a Retro section. The reason is also added to Notes, with the date. Bring one back with: pet promote ID --to STAGE.
+    Shelved ideas are hidden from ls and next (see them with ls -a) and gain a Retro
+    section. The reason is also added to Notes, with the date. Bring one back with: pet
+    promote ID --to STAGE.
     """
     store = _store(ctx)
     idea = _find(store, idea_id)
@@ -1036,7 +1058,8 @@ def shelve(
         )
     else:
         console.print(
-            f"{escape(idea.id)}: {_status(Status.SHELVED)}  [dim]{escape(idea.shelved_reason or '')}[/]",
+            f"{escape(idea.id)}: {_status(Status.SHELVED)}  "
+            f"[dim]{escape(idea.shelved_reason or '')}[/]",
             soft_wrap=True,
         )
 
@@ -1053,7 +1076,9 @@ def review(
     ctx: typer.Context,
     days: Annotated[
         int,
-        typer.Option("--days", "-d", min=0, metavar="N", help="Ideas not looked at for this many days."),
+        typer.Option(
+            "--days", "-d", min=0, metavar="N", help="Ideas not looked at for this many days."
+        ),
     ] = 14,
     no_input: NoInput = False,
 ) -> None:
@@ -1296,7 +1321,9 @@ def _count_word(n: int) -> str:
 @app.command("sync")
 def sync_(
     ctx: typer.Context,
-    message: Annotated[str | None, typer.Option("--message", "-m", metavar="TEXT", help="Commit message.")] = None,
+    message: Annotated[
+        str | None, typer.Option("--message", "-m", metavar="TEXT", help="Commit message.")
+    ] = None,
 ) -> None:
     """Back up the store: commit, pull --rebase, push (if it's a git repo)."""
     store = _store(ctx)
@@ -1320,7 +1347,8 @@ def export_(
 ) -> None:
     """Export all ideas as a Markdown index and/or JSON.
 
-    Use - as FILE to write to standard output. Links in the Markdown index are relative to the directory of FILE.
+    Use - as FILE to write to standard output. Links in the Markdown index are relative to
+    the directory of FILE.
     """
     if not md and not json_:
         _fail("pass --md FILE and/or --json FILE")
