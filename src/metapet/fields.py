@@ -76,6 +76,11 @@ def put(idea: Idea, field: Field, value: Value, order: Order) -> None:
         put_text(idea, field, "" if value is None else str(value), order)
 
 
+def add_items(idea: Idea, field: Field, values: list[str], order: Order) -> None:
+    """Add items to the end of a list section without rewriting what is already there."""
+    put_text(idea, field, sections.extend_items(raw(idea, field), values), order)
+
+
 def put_text(idea: Idea, field: Field, text: str, order: Order) -> None:
     """Write raw Markdown as a summary or section field's content."""
     body = sections.parse(idea.body)

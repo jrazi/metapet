@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from metapet import fields, stages, views
 from metapet.model import Idea, Status
 from metapet.prompter import Prompter
-from metapet.schema import LIFECYCLE, Field, Kind, Schema
+from metapet.schema import LIFECYCLE, Field, Kind, Schema, Storage
 
 TITLE_QUESTION = "What is the idea, in a few words?"
 # Stages the continuation after `new` offers to move on to.
@@ -73,12 +73,29 @@ def _ask(s: Session, idea: Idea, f: Field) -> fields.Value:
     return (answer or "").strip() or None
 
 
+def _only_adds(f: Field, current: fields.Value, value: fields.Value) -> bool:
+    """True when a list answer keeps the current items and adds new ones after them."""
+    return (
+        f.kind == Kind.LIST
+        and f.storage == Storage.SECTION
+        and isinstance(current, list)
+        and isinstance(value, list)
+        and bool(current)
+        and value[: len(current)] == current
+    )
+
+
 def ask_field(s: Session, idea: Idea, f: Field) -> bool:
     """Ask one field; when the answer changes it, store it, touch the idea and save."""
     value = _ask(s, idea, f)
-    if value is None or value == [] or value == fields.get(idea, f):
+    current = fields.get(idea, f)
+    if value is None or value == [] or value == current:
         return False
-    fields.put(idea, f, value, s.schema.section_order)
+    if _only_adds(f, current, value):
+        # Keep the section as written (nested items, numbering, paragraphs) and append.
+        fields.add_items(idea, f, value[len(current) :], s.schema.section_order)
+    else:
+        fields.put(idea, f, value, s.schema.section_order)
     idea.touch()
     s.save(idea)
     return True

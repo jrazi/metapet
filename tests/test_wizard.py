@@ -181,3 +181,25 @@ def test_empty_list_answer_keeps_the_items(store):
     s, _ = session(store, [[]])
     assert wizard.ask_field(s, idea, S.field("features")) is False
     assert fields.get(on_disk(store, idea), S.field("features")) == ["search", "export"]
+
+
+def test_added_list_items_keep_the_section_as_written(store):
+    idea = sketch_idea(store)
+    stages.move(idea, Status.SPEC, S)
+    written = "- search\n  - fuzzy\n1. export\n\nSome paragraph about features."
+    fields.put_text(idea, S.field("features"), written, S.section_order)
+    store.save(idea)
+    current = fields.get(idea, S.field("features"))
+    s, _ = session(store, [[*current, "new one"]])
+    assert wizard.ask_field(s, idea, S.field("features")) is True
+    assert f"## Features\n{written}\n- new one" in on_disk(store, idea).body
+
+
+def test_starting_the_list_again_rewrites_the_section(store):
+    idea = sketch_idea(store)
+    stages.move(idea, Status.SPEC, S)
+    fields.put_text(idea, S.field("features"), "- search\n  - fuzzy", S.section_order)
+    store.save(idea)
+    s, _ = session(store, [["export"]])
+    wizard.ask_field(s, idea, S.field("features"))
+    assert "## Features\n- export\n" in on_disk(store, idea).body

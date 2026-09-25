@@ -104,3 +104,9 @@ def test_old_template_placeholders_read_as_empty():
     for key in ("problem", "solution", "why_now", "features", "mvp"):
         assert not fields.is_filled(idea, built_in.field(key)), key
     assert fields.get(idea, built_in.field("summary")) == "One-liner."
+
+
+def test_extend_items_keeps_the_text_as_written():
+    text = "- search\n  - fuzzy\n1. export\n\nA paragraph."
+    assert sections.extend_items(text, ["new one"]) == text + "\n- new one"
+    assert sections.extend_items("<!-- What? -->", ["a", "b"]) == "- a\n- b"

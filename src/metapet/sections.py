@@ -74,6 +74,12 @@ def render_items(values: list[str]) -> str:
     return "\n".join("- " + " ".join(value.split()) for value in values)
 
 
+def extend_items(content: str, values: list[str]) -> str:
+    """Add list items at the end of a section, keeping the text before them as written."""
+    added = render_items(values)
+    return f"{content.rstrip()}\n{added}" if not is_empty(content) else added
+
+
 def find(body: Body, match: Callable[[str], bool]) -> Section | None:
     return next((s for s in body.sections if match(s.heading)), None)
 
