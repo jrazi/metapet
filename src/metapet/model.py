@@ -63,7 +63,14 @@ REQUIRED_KEYS = ("id", "title", "status", "created")
 
 
 class IdeaError(ValueError):
-    """Raised when an idea file cannot be parsed into a valid idea."""
+    """Raised when an idea file cannot be parsed into a valid idea.
+
+    `problems` lists each problem; the message joins them with "; ".
+    """
+
+    def __init__(self, *problems: str):
+        super().__init__("; ".join(problems))
+        self.problems = list(problems)
 
 
 LONG_TITLE_CHARS = 60
@@ -154,31 +161,40 @@ class Idea:
         except Exception as exc:  # yaml errors come in many flavours
             raise IdeaError(f"unreadable frontmatter: {_yaml_problem(exc)}") from exc
         meta = dict(post.metadata)
+        problems: list[str] = []
         missing = [key for key in REQUIRED_KEYS if not meta.get(key)]
         if missing:
-            raise IdeaError(f"missing required field(s): {', '.join(missing)}")
-        try:
-            idea = cls(
-                id=str(meta.pop("id")),
-                title=str(meta.pop("title")),
-                status=Status(meta.pop("status")),
-                created=_as_date(meta.pop("created")),
-                updated=_as_date(meta.pop("updated", None)),
-                reviewed=_as_date(meta.pop("reviewed", None)),
-                tags=_as_list(meta.pop("tags", None)),
-                excitement=_as_scale("excitement", meta.pop("excitement", None)),
-                impact=_as_scale("impact", meta.pop("impact", None)),
-                effort=_as_effort(meta.pop("effort", None)),
-                repo=meta.pop("repo", None),
-                related=_as_list(meta.pop("related", None)),
-                shelved_reason=meta.pop("shelved_reason", None),
-                body=post.content,
-                path=path,
-            )
-        except (ValueError, TypeError) as exc:
-            raise IdeaError(str(exc)) from exc
-        idea.extra = meta
-        return idea
+            problems.append(f"missing required field(s): {', '.join(missing)}")
+
+        def check(key: str, convert, default=None):
+            """Convert one key, noting its problem instead of stopping at the first."""
+            value = meta.pop(key, None)
+            if value is None or value == "":
+                return default
+            try:
+                return convert(value)
+            except (ValueError, TypeError) as exc:
+                problems.append(f"{key}: {_problem(key, value, exc)}")
+                return default
+
+        values = {
+            "id": check("id", str, ""),
+            "title": check("title", str, ""),
+            "status": check("status", Status, Status.SEED),
+            "created": check("created", _as_date, dt.date.today()),
+            "updated": check("updated", _as_date),
+            "reviewed": check("reviewed", _as_date),
+            "tags": check("tags", _as_list, []),
+            "excitement": check("excitement", _as_scale),
+            "impact": check("impact", _as_scale),
+            "effort": check("effort", _as_effort),
+            "repo": check("repo", str),
+            "related": check("related", _as_list, []),
+            "shelved_reason": check("shelved_reason", str),
+        }
+        if problems:
+            raise IdeaError(*problems)
+        return cls(**values, body=post.content, extra=meta, path=path)
 
     @classmethod
     def load(cls, path: Path) -> Idea:
@@ -201,6 +217,23 @@ def _yaml_problem(exc: Exception) -> str:
     return " ".join(str(exc).split())
 
 
+def _problem(key: str, value: Any, exc: Exception) -> str:
+    """The problem with a frontmatter value, in words a person can act on."""
+    if key == "status":
+        return f"'{value}' is not one of {', '.join(Status)}"
+    if key in ("created", "updated", "reviewed"):
+        return f"'{value}' is not a date (YYYY-MM-DD)"
+    if key == "effort":
+        return f"'{value}' must be S, M, L or XL"
+    if key in ("excitement", "impact"):
+        return str(exc) if isinstance(exc, _ScaleError) else f"'{value}' is not a number from 1 to 5"
+    return str(exc)
+
+
+class _ScaleError(ValueError):
+    pass
+
+
 def _as_date(value: Any) -> dt.date | None:
     if value is None or isinstance(value, dt.date) and not isinstance(value, dt.datetime):
         return value
@@ -221,10 +254,12 @@ def _as_effort(value: Any) -> Effort | None:
     return Effort(str(value).upper()) if value else None
 
 
-def _as_scale(name: str, value: Any) -> int | None:
+def _as_scale(value: Any) -> int | None:
     if value is None:
         return None
+    if isinstance(value, bool):
+        raise ValueError(value)
     number = int(value)
     if not 1 <= number <= 5:
-        raise ValueError(f"{name} must be 1-5, got {number}")
+        raise _ScaleError(f"must be 1-5, got {number}")
     return number

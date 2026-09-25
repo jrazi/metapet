@@ -934,7 +934,7 @@ def promote(
     store.save(idea)
     _print_moved(idea, old, target, verbose)
     if gaps:
-        labels = escape(", ".join(f.label for f in gaps))
+        labels = escape(_label_keys(gaps))
         err.print(
             f"[yellow]warning:[/] still empty: {labels} (fill them with pet refine {escape(idea.id)})",
             soft_wrap=True,
@@ -1174,7 +1174,12 @@ def check(ctx: typer.Context) -> None:
     ideas, broken = store.scan()
     mismatched = [i for i in ideas if i.path and i.path.stem != i.id]
     for bad in broken:
-        err.print(f"[red]✗[/] {escape(bad.path.name)}: {escape(bad.error)}")
+        if len(bad.problems) > 1:
+            err.print(f"[red]✗[/] {escape(bad.path.name)}:")
+            for problem in bad.problems:
+                err.print(f"    {escape(problem)}", soft_wrap=True)
+        else:
+            err.print(f"[red]✗[/] {escape(bad.path.name)}: {escape(bad.error)}", soft_wrap=True)
     for idea in ideas:
         if len(idea.id) > ids.ID_MAX and idea.path:
             err.print(
@@ -1213,14 +1218,19 @@ def check(ctx: typer.Context) -> None:
                 continue
             gaps = stages.gaps(idea, idea_schema, idea.status)
             if gaps:
-                labels = escape(", ".join(f.label for f in gaps))
+                labels = escape(_label_keys(gaps))
                 console.print(
-                    f"[dim]i {escape(idea.id)} ({idea.status.value}): empty: {labels}[/]",
+                    f"[dim]· {escape(idea.id)} ({idea.status.value}): empty: {labels}[/]",
                     soft_wrap=True,
                 )
     if broken or idea_schema is None:
         raise typer.Exit(1)
     console.print(f"[green]✓[/] {len(ideas)} ideas OK")
+
+
+def _label_keys(found: list[schema.Field]) -> str:
+    """`Rough solution (solution)`: the label people read and the key pet set takes."""
+    return ", ".join(f"{f.label} ({f.key})" for f in found)
 
 
 def _count_word(n: int) -> str:

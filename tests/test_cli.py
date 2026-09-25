@@ -267,7 +267,7 @@ def test_promote_warns_about_empty_expected_fields(home):
     result = pet(home, "promote", "budget", "--no-input")
     assert result.exit_code == 0
     assert "sketch → spec" in result.output
-    assert "warning: still empty: Problem, Rough solution" in result.output
+    assert "warning: still empty: Problem (problem), Rough solution (solution)" in result.output
     assert "status: spec" in idea_text(home, "budget-tracker")
 
 
@@ -278,7 +278,9 @@ def test_check_lists_readiness_and_warns(home):
     home.templates.mkdir()
     result = pet(home, "check")
     assert result.exit_code == 0, result.output
-    assert "i budget-tracker (sketch): empty: Problem, Rough solution" in result.output
+    assert "· budget-tracker (sketch): empty: Problem (problem), Rough solution (solution)" in (
+        result.output
+    )
     assert "templates/ is no longer used" in result.output
     assert "1 ideas OK" in result.output
 
@@ -916,3 +918,21 @@ def test_promote_back_says_moved_back(home):
     pet(home, "promote", "budget", "--to", "building", "--no-input")
     result = pet(home, "promote", "budget", "--to", "seed", "--no-input")
     assert "budget-tracker: building → seed (moved back)" in result.output
+
+
+def test_check_lists_every_problem(home):
+    pet(home, "init")
+    (home.ideas / "bad-values.md").write_text(
+        "---\nid: bad-values\ntitle: Bad\nstatus: prototype\ncreated: yesterday\n"
+        "excitement: 9\neffort: huge\n---\n"
+    )
+    result = pet(home, "check")
+    assert result.exit_code == 1
+    for line in (
+        "✗ bad-values.md:",
+        "    status: 'prototype' is not one of seed, sketch, spec, building, shipped, shelved",
+        "    created: 'yesterday' is not a date (YYYY-MM-DD)",
+        "    excitement: must be 1-5, got 9",
+        "    effort: 'huge' must be S, M, L or XL",
+    ):
+        assert line in result.output.splitlines()

@@ -28,7 +28,8 @@ class IdeaLookupError(LookupError):
 @dataclass(frozen=True)
 class BrokenFile:
     path: Path
-    error: str
+    error: str  # every problem, joined with "; "
+    problems: tuple[str, ...] = ()
 
 
 def _match(query: str, items: list[T], names: Callable[[T], tuple[str, str]]) -> list[T]:
@@ -75,7 +76,7 @@ class Store:
             try:
                 ideas.append(Idea.load(path))
             except IdeaError as exc:
-                broken.append(BrokenFile(path, str(exc)))
+                broken.append(BrokenFile(path, str(exc), tuple(exc.problems)))
         return ideas, broken
 
     def all(self) -> list[Idea]:

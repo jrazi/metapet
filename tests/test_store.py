@@ -104,7 +104,7 @@ def test_impact_and_reviewed_round_trip(store):
 
 def test_impact_out_of_range_is_rejected():
     text = "---\nid: x\ntitle: x\nstatus: seed\ncreated: 2026-01-01\nimpact: 9\n---\n"
-    with pytest.raises(IdeaError, match="impact must be 1-5, got 9"):
+    with pytest.raises(IdeaError, match="impact: must be 1-5, got 9"):
         Idea.from_markdown(text)
 
 
@@ -162,3 +162,21 @@ def test_find_names_unreadable_file(store):
         store.find("pomo")
     assert store.find_path("pomo") == store.home.ideas / "pomo.md"
     assert store.find_path("budget") == store.home.ideas / "budget-tracker.md"
+
+
+def test_invalid_file_lists_every_problem():
+    text = (
+        "---\nid: x\ntitle: x\nstatus: prototype\ncreated: yesterday\nexcitement: high\n"
+        "impact: 9\neffort: huge\nreviewed: soon\n---\n"
+    )
+    with pytest.raises(IdeaError) as exc:
+        Idea.from_markdown(text)
+    assert exc.value.problems == [
+        "status: 'prototype' is not one of seed, sketch, spec, building, shipped, shelved",
+        "created: 'yesterday' is not a date (YYYY-MM-DD)",
+        "reviewed: 'soon' is not a date (YYYY-MM-DD)",
+        "excitement: 'high' is not a number from 1 to 5",
+        "impact: must be 1-5, got 9",
+        "effort: 'huge' must be S, M, L or XL",
+    ]
+    assert str(exc.value) == "; ".join(exc.value.problems)
