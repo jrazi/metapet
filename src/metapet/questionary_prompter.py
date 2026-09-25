@@ -20,7 +20,8 @@ from metapet.prompter import PartialAnswer
 from metapet.views import Card
 
 SKIP = "Skip"
-LONG_INSTRUCTION = "Enter to skip, or type e and Enter to write in your editor"
+LONG_SKIP = "Enter skips; e opens your editor"
+LONG_KEEP = "Enter keeps the current answer; e opens your editor"
 
 
 # Returned by resolve_long when the editor could not be opened: ask the question again.
@@ -111,10 +112,11 @@ class QuestionaryPrompter:
         if hint:
             self.console.print(f"[dim]{escape(hint)}[/]")
         if current:
-            self.console.print(f"[dim]{escape(current)}[/]")
-            self.console.print("[dim]Enter keeps it.[/]")
+            self.console.print("[dim]Current answer:[/]")
+            self.console.print(current, markup=False, highlight=False)
+        instruction = LONG_KEEP if current else LONG_SKIP
         while True:
-            raw = _ask(questionary.text(question, instruction=LONG_INSTRUCTION, **self.io))
+            raw = _ask(questionary.text(question, instruction=instruction, **self.io))
             answer = resolve_long(raw, current, notify=self.message)
             if answer is not ASK_AGAIN:
                 return answer

@@ -432,6 +432,9 @@ def _print_added(idea: Idea, verbose: bool) -> None:
 
 def _print_moved(idea: Idea, old: Status, new: Status, verbose: bool) -> None:
     line = f"{escape(idea.id)}: {_status(old)} → {_status(new)}"
+    lifecycle = stages.LIFECYCLE
+    if old in lifecycle and new in lifecycle and lifecycle.index(new) < lifecycle.index(old):
+        line += " (moved back)"
     if verbose:
         line += f"  [dim]{escape(str(idea.path))}[/]"
     console.print(line, soft_wrap=True, highlight=False)
@@ -894,8 +897,9 @@ app.command("delete", hidden=True)(rm)
     "Moves one stage forward by default. --to can skip stages (each skipped stage still adds "
     "its sections) or move back (adds and removes nothing). A shelved idea returns with "
     "--to STAGE.\n\n"
-    "In a terminal, a forward move shows the idea, offers to fill expected fields that are "
-    "still empty, then asks the questions of each new stage; every question can be skipped. "
+    "In a terminal, a forward move offers to fill expected fields that are still empty, "
+    "shows the idea, then asks the questions of each new stage that are still empty; every "
+    "question can be skipped, and answered ones are changed with pet refine. "
     "With --no-input, or outside a terminal, promote only warns about empty expected fields "
     "and moves the idea anyway.\n\n" + LIFECYCLE_HELP
 )

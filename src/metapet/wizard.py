@@ -55,13 +55,14 @@ def show_card(s: Session, idea: Idea) -> None:
         s.last_card = card
 
 
-def _start(s: Session, idea: Idea) -> None:
+def _start(s: Session, idea: Idea, *, card: bool = True) -> None:
     if not s.started:
         s.started = True
         s.prompter.message(
             f"Press Enter to skip a question. Change answers later with pet refine {idea.id}."
         )
-    show_card(s, idea)
+    if card:
+        show_card(s, idea)
 
 
 # -- single fields ---------------------------------------------------------------
@@ -231,11 +232,30 @@ def new_idea(s: Session, idea: Idea, supplied: set[str]) -> None:
     )
 
 
+def _open_fields(s: Session, idea: Idea, status: Status, skip: set[str]) -> list[Field]:
+    """The fields of a stage that are still empty, leaving out the keys in skip."""
+    return [
+        f
+        for f in s.schema.stage(status).fields
+        if f.key not in skip and not fields.is_filled(idea, f)
+    ]
+
+
+def continue_question(s: Session, idea: Idea, target: Status) -> str:
+    """`Go on to sketch (meaning)? 5 questions: Problem, Who it's for, Rough solution, ...`"""
+    meaning = s.schema.stage(target).meaning
+    labels = [f.label for f in _open_fields(s, idea, target, set())]
+    if not labels:
+        return f"Go on to {target.value} ({meaning})? Its questions are already answered."
+    count = f"{len(labels)} question{'' if len(labels) == 1 else 's'}"
+    listed = ", ".join(labels[:3]) + (", ..." if len(labels) > 3 else "")
+    return f"Go on to {target.value} ({meaning})? {count}: {listed}"
+
+
 def continue_stages(s: Session, idea: Idea) -> None:
     """Offer to move on to the next stage and answer its questions, one stage at a time."""
     while (target := idea.status.next()) in CONTINUE_TO:
-        question = f"Promote to {target.value} and answer its questions now?"
-        if not s.prompter.confirm(question, default=False):
+        if not s.prompter.confirm(continue_question(s, idea, target), default=False):
             return
         if not promote(s, idea, target, ask_about_gaps=False):
             return
@@ -244,19 +264,21 @@ def continue_stages(s: Session, idea: Idea) -> None:
 def promote(s: Session, idea: Idea, target: Status, *, ask_about_gaps: bool = True) -> bool:
     """Promote with questions; returns False when the user cancels.
 
-    Backward moves and moves from shelved ask nothing.
+    Only empty fields are asked; filled ones are changed with refine. Backward moves and
+    moves from shelved ask nothing.
     """
     reached = stages.statuses_between(idea.status, target)
     if idea.status not in LIFECYCLE or target not in LIFECYCLE or not reached:
-        stages.promote(idea, target, s.schema)
+        stages.promote(idea, target, s.schema, s.today)
         s.save(idea)
         return True
-    _start(s, idea)
+    # The card is shown once, after the move.
+    _start(s, idea, card=False)
     gaps = stages.gaps(idea, s.schema, stages.before(target))
-    # Fields already asked about in the gap step are not asked again below.
+    # Fields asked about, or passed over, in the gap step are not asked again below.
     answered: set[str] = set()
     if gaps:
-        empty = ", ".join(f"{f.label} ({f.stage})" for f in gaps)
+        empty = ", ".join(f"{f.label} ({f.key})" for f in gaps)
         if ask_about_gaps:
             s.prompter.message(f"Still empty: {empty}")
             action = s.prompter.select(
@@ -267,18 +289,17 @@ def promote(s: Session, idea: Idea, target: Status, *, ask_about_gaps: bool = Tr
                 return False
             if action == "fill":
                 ask_fields(s, idea, gaps)
-                answered = {f.key for f in gaps}
+            answered = {f.key for f in gaps}
         else:
             s.prompter.message(f"Warning: still empty: {empty}")
-    stages.promote(idea, target, s.schema)
+    stages.promote(idea, target, s.schema, s.today)
     s.save(idea)
+    show_card(s, idea)
     for status in reached:
-        stage = s.schema.stage(status)
-        to_ask = [f for f in stage.fields if f.key not in answered]
+        to_ask = _open_fields(s, idea, status, answered)
         if not to_ask:
             continue
-        show_card(s, idea)
-        s.prompter.message(f"{status.value}: {stage.meaning}")
+        s.prompter.message(f"{status.value}: {s.schema.stage(status).meaning}")
         ask_fields(s, idea, to_ask)
     return True
 

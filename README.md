@@ -110,7 +110,9 @@ an HTML comment, for each section field of the new stage. It never touches what 
 have already written and skips sections you already have. Every field can be left
 empty: if an expected field of an earlier stage is empty, promote warns and moves the
 idea anyway. In a terminal it first offers to fill those fields, then asks the
-questions of the new stage; any question can be skipped. `pet check` lists the empty
+questions of the new stage that are still empty; any question can be skipped, and
+answered ones are changed with `pet refine`. Moving back (`--to` an earlier stage)
+adds and removes nothing. `pet check` lists the empty
 expected fields of every idea.
 
 Fill fields by answering questions with `pet refine ID`, with `pet set ID KEY=VALUE`,

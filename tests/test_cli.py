@@ -908,3 +908,11 @@ def test_shelve_twice_says_replaced(home):
     pet(home, "promote", "dash", "--to", "sketch", "--no-input")
     assert "Back from the shelf (it was shelved: again)" in idea_text(home, "dash")
     assert pet(home, "shelve", "dash", "").exit_code == 1
+
+
+def test_promote_back_says_moved_back(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    pet(home, "promote", "budget", "--to", "building", "--no-input")
+    result = pet(home, "promote", "budget", "--to", "seed", "--no-input")
+    assert "budget-tracker: building → seed (moved back)" in result.output

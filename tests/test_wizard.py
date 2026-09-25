@@ -76,8 +76,11 @@ def test_continuation_promotes_to_sketch_and_asks_its_questions(store):
     idea = store.create("Budget tracker")
     s, p = session(store, [True, "Money leaks.", None, "A small CLI.", None, None, False])
     wizard.continue_stages(s, idea)
-    assert asked(p)[0] == "Promote to sketch and answer its questions now?"
-    assert asked(p)[-1] == "Promote to spec and answer its questions now?"
+    assert asked(p)[0] == (
+        "Go on to sketch (thought through for a few minutes)? 5 questions: Problem, "
+        "Who it's for, Rough solution, ..."
+    )
+    assert asked(p)[-1].startswith("Go on to spec (concrete enough to start building from)?")
     saved = on_disk(store, idea)
     assert saved.status == Status.SKETCH
     assert "## Problem\nMoney leaks." in saved.body
@@ -88,7 +91,7 @@ def test_continuation_warns_instead_of_asking_about_gaps(store):
     idea = sketch_idea(store)
     s, p = session(store, [True, *[None] * SPEC_QUESTIONS, False])
     wizard.continue_stages(s, idea)
-    assert "Warning: still empty: Problem (sketch), Rough solution (sketch)" in p.messages
+    assert "Warning: still empty: Problem (problem), Rough solution (solution)" in p.messages
     assert on_disk(store, idea).status == Status.SPEC
 
 
@@ -96,7 +99,7 @@ def test_promote_with_gaps_can_be_cancelled(store):
     idea = sketch_idea(store)
     s, p = session(store, ["cancel"])
     assert wizard.promote(s, idea, Status.SPEC) is False
-    assert "Still empty: Problem (sketch), Rough solution (sketch)" in p.messages
+    assert "Still empty: Problem (problem), Rough solution (solution)" in p.messages
     method, _, kwargs = p.calls[0]
     assert method == "select"
     assert [label for _, label in kwargs["options"]] == [
@@ -137,17 +140,56 @@ def test_filled_gaps_are_not_asked_again_in_a_reached_stage(store):
     assert "## Problem\nMoney leaks." in saved.body
 
 
-def test_promote_prefills_current_values(store):
+def test_promote_skips_filled_fields(store):
     idea = sketch_idea(store, problem="P", solution="S", mvp="Just a script", effort="M")
-    s, p = session(store, [None] * SPEC_QUESTIONS)
+    s, p = session(store, [None] * (SPEC_QUESTIONS - 2))
     wizard.promote(s, idea, Status.SPEC)
-    by_question = {question: kwargs for _, question, kwargs in p.calls}
-    assert by_question["What is the smallest version you would actually use?"]["current"] == (
-        "Just a script"
-    )
-    assert by_question["How big is it?"]["default"] == "M"
-    assert by_question["What should it do?"]["current"] == []
+    questions = asked(p)
+    assert "What is the smallest version you would actually use?" not in questions
+    assert "How big is it?" not in questions
+    assert questions[0] == "What should it do?"
     assert "## MVP scope\nJust a script" in on_disk(store, idea).body
+
+
+def test_promote_anyway_does_not_ask_gaps(store):
+    idea = store.create("Budget tracker")
+    s, p = session(store, ["anyway", *[None] * 20])
+    assert wizard.promote(s, idea, Status.BUILDING) is True
+    questions = asked(p)
+    for gap in (
+        "What problem does it solve?",
+        "How could it work, roughly?",
+        "What should it do?",
+        "What is the smallest version you would actually use?",
+    ):
+        assert gap not in questions
+
+
+def test_one_card_per_promotion(store):
+    idea = store.create("Budget tracker")
+    s, p = session(store, [None] * 5)
+    wizard.promote(s, idea, Status.SKETCH)
+    assert [card.stage for card in p.cards] == ["sketch"]
+    s.prompter.answers = ["anyway", *[None] * SPEC_QUESTIONS]
+    wizard.promote(s, idea, Status.SPEC)
+    assert [card.stage for card in p.cards] == ["sketch", "spec"]
+
+
+def test_continue_question_names_the_stage(store):
+    idea = sketch_idea(store, problem="P")
+    question = wizard.continue_question(
+        wizard.Session(S, ScriptedPrompter([]), store.save, []), idea, Status.SPEC
+    )
+    assert question == (
+        "Go on to spec (concrete enough to start building from)? 7 questions: Features, "
+        "MVP scope, Stack, ..."
+    )
+    idea = store.create("Other")
+    for key in ("problem", "audience", "solution", "value", "why_now"):
+        fields.put(idea, S.field(key), "x", S.section_order)
+    assert wizard.continue_question(
+        wizard.Session(S, ScriptedPrompter([]), store.save, []), idea, Status.SKETCH
+    ).endswith("Its questions are already answered.")
 
 
 def test_promote_backwards_asks_nothing(store):
