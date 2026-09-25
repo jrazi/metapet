@@ -381,3 +381,22 @@ def test_review_ctrl_c_exits_130(home, monkeypatch):
     assert result.exit_code == 130
     assert "Reviewed 0, 1 left." in result.output
     assert "Stopped. Answers so far are saved." in result.output
+
+
+def test_bare_pet_without_a_terminal_prints_help(home):
+    result = pet(home)
+    assert result.exit_code == 0
+    assert "Usage" in result.output and "Capture and grow" in result.output
+
+
+def test_bare_pet_in_a_terminal_opens_the_ui(home, monkeypatch):
+    from metapet.tui import PetApp
+
+    opened = []
+    monkeypatch.setattr(cli, "_interactive", lambda no_input: True)
+    monkeypatch.setattr(PetApp, "run", lambda self: opened.append(self))
+    assert pet(home).exit_code == 1  # no store yet
+    pet(home, "init")
+    assert pet(home).exit_code == 0
+    assert pet(home, "ui").exit_code == 0
+    assert len(opened) == 2
