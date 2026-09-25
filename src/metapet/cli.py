@@ -653,7 +653,8 @@ def shelve(
     help="Go through live ideas you have not looked at for a while.\n\n"
     "An idea counts as looked at when it was created, changed or reviewed. In a terminal, "
     "shows each idea, oldest first, and asks what to do with it: promote, refine, add a note, "
-    "set excitement, shelve, skip or quit. Anything but quit marks the idea as reviewed. "
+    "set excitement, shelve, skip or quit. Skip, or any action that changes the idea, marks "
+    "it as reviewed; if nothing changed, the same question is asked again. "
     "Outside a terminal, or with --no-input, only lists the ideas."
 )
 def review(

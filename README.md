@@ -175,8 +175,9 @@ have waited six months. Shipped and shelved ideas are excluded.
 `pet review` shows the live ideas you have not looked at for a while, oldest first.
 An idea counts as looked at when it was created, changed or reviewed; the date of
 the last review is kept in the `reviewed` key. For each idea you can promote it,
-refine it, add a note, set its excitement, shelve it, skip it or quit. Anything but
-quit marks the idea as reviewed. Outside a terminal it only lists the ideas.
+refine it, add a note, set its excitement, shelve it, skip it or quit. Skipping it,
+or any action that changes it, marks the idea as reviewed; if nothing changed, the
+same question is asked again. Outside a terminal it only lists the ideas.
 
 ### Full-screen view
 
