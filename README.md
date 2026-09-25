@@ -229,7 +229,7 @@ excitement, impact and effort; the preview shows its id and details. Keys:
 | `n` | Add a note |
 | `s` | Shelve, with a reason |
 | `e` | Open the file in `$EDITOR` |
-| `x` | Set excitement (1-5) |
+| `x` | Rate: set excitement (1-5) |
 
 Add, promote and refine ask the same questions as the commands of the same name;
 the view steps aside while they run and comes back afterwards. Shipped and shelved

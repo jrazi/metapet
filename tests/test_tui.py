@@ -461,3 +461,15 @@ def test_title_column_follows_every_resize(store):
 
     asyncio.run(main())
 
+
+def test_footer_fits_80_columns(store):
+    store.create("Budget tracker")
+    app, _ = make_app(store)
+
+    async def main():
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            keys = list(app.query_one(Footer).query("*"))
+            assert keys and all(key.region.right <= 80 for key in keys)
+
+    asyncio.run(main())

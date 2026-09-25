@@ -212,7 +212,7 @@ class PetApp(App[None]):
         Binding("n", "note", "Note"),
         Binding("s", "shelve", "Shelve"),
         Binding("e", "edit", "Edit"),
-        Binding("x", "excitement", "Excite"),
+        Binding("x", "excitement", "Rate"),
         Binding("escape", "clear_filter", "Clear filter", show=False),
     ]
     ENABLE_COMMAND_PALETTE = False
