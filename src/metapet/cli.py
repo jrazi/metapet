@@ -56,8 +56,8 @@ app = typer.Typer(
     help="Capture and grow pet-project ideas.\n\n"
     + LIFECYCLE_HELP
     + "\n\n[bold]Tab completion[/] (commands and idea ids): pet --install-completion, "
-    "then open a new shell.",
-    no_args_is_help=True,
+    "then open a new shell.\n\n"
+    "Run pet on its own in a terminal to open the full-screen view (same as pet ui).",
     rich_markup_mode="rich",
 )
 console = Console()
@@ -73,7 +73,7 @@ STATUS_STYLE = {
 }
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     home: Annotated[
@@ -82,6 +82,15 @@ def main(
     ] = None,
 ) -> None:
     ctx.obj = paths.resolve(home)
+    if ctx.invoked_subcommand is not None or ctx.resilient_parsing:
+        return
+    if _interactive(False):
+        _run_ui(ctx)
+        return
+    help_text = ctx.get_help()  # rich help prints itself and returns ""
+    if help_text:
+        typer.echo(help_text)
+    raise typer.Exit(0)
 
 
 # -- helpers -----------------------------------------------------------------
@@ -671,6 +680,23 @@ def review(
     if result.stopped:
         err.print("Stopped. Answers so far are saved.")
         raise typer.Exit(130)
+
+
+@app.command()
+def ui(ctx: typer.Context) -> None:
+    """Browse and change ideas in a full-screen view.
+
+    Keys: / filter, a add, p promote, r refine, n note, s shelve, e edit, x excitement, q quit.
+    """
+    _run_ui(ctx)
+
+
+def _run_ui(ctx: typer.Context) -> None:
+    store = _store(ctx)
+    idea_schema = _schema(ctx)
+    from metapet.tui import PetApp
+
+    PetApp(store, idea_schema, prompter=_prompter).run()
 
 
 # -- discovery ---------------------------------------------------------------
