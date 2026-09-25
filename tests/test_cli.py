@@ -2,6 +2,7 @@ import json
 
 from typer.testing import CliRunner
 
+from metapet import cli
 from metapet.cli import app
 
 runner = CliRunner()
@@ -70,3 +71,11 @@ def test_check_fails_on_broken_file(home):
     pet(home, "init")
     (home.ideas / "bad.md").write_text("no frontmatter here\n")
     assert pet(home, "check").exit_code == 1
+
+
+def test_long_paths_are_never_wrapped(home, monkeypatch):
+    monkeypatch.setattr(cli.console, "width", 20)
+    pet(home, "init")
+    assert pet(home, "where").output.startswith(str(home.path))
+    added = pet(home, "add", "A very long idea title that makes a long path").output
+    assert str(home.ideas / "a-very-long-idea-title-that-makes-a-long-path.md") in added

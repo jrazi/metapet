@@ -159,7 +159,9 @@ def init(
     already = home.exists
     store.init()
     verb = "Using existing" if already else "Created"
-    console.print(f"{verb} idea store at [bold]{home.path}[/] [dim]({home.source})[/]")
+    console.print(
+        f"{verb} idea store at [bold]{home.path}[/] [dim]({home.source})[/]", soft_wrap=True
+    )
     if git or remote:
         try:
             sync.init_repo(home.path, remote)
@@ -174,7 +176,7 @@ def where(ctx: typer.Context) -> None:
     """Show which data directory is in use, and why."""
     home: paths.DataHome = ctx.obj
     state = "" if home.exists else "  [yellow](not initialized — run `pet init`)[/]"
-    console.print(f"{home.path}  [dim]← {home.source}[/]{state}")
+    console.print(f"{home.path}  [dim]← {home.source}[/]{state}", soft_wrap=True)
 
 
 # -- capture -----------------------------------------------------------------
@@ -190,7 +192,7 @@ def add(
     """Capture a seed instantly, without opening an editor."""
     store = _store(ctx)
     idea = store.create(title, tags=list(tag or []), body=note or "")
-    console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]")
+    console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
 
 
 @app.command()
@@ -219,7 +221,7 @@ def new(
         excitement=int(excitement) if excitement else None,
         effort=Effort(effort.upper()) if effort else None,
     )
-    console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]")
+    console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
     if edit:
         click.edit(filename=str(idea.path))
 
@@ -302,7 +304,9 @@ def promote(
     if old == Status.SHELVED:
         idea.shelved_reason = None
     store.save(idea)
-    console.print(f"{idea.id}: {_status(old)} → {_status(target)}  [dim]{idea.path}[/]")
+    console.print(
+        f"{idea.id}: {_status(old)} → {_status(target)}  [dim]{idea.path}[/]", soft_wrap=True
+    )
 
 
 @app.command()
