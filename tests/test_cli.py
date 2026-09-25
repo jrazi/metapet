@@ -709,3 +709,16 @@ def test_rm_deletes_and_cleans_related(home, monkeypatch):
     assert pet(home, "delete", "c", input="y\n").exit_code == 0
     assert pet(home, "delete", "b", "--yes").exit_code == 0
     assert list(home.ideas.iterdir()) == []
+
+
+def test_add_duplicate_prints_note(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    result = pet(home, "add", "budget  tracker!")
+    assert "note: budget-tracker has the same name" in result.output
+    assert (home.ideas / "budget-tracker-2.md").exists()
+    prompter = interactive(monkeypatch, [False])
+    result = pet(home, "new", "Budget tracker")
+    assert result.exit_code == 0
+    assert prompter.messages[-1].startswith("Nothing added.")
+    assert len(list(home.ideas.iterdir())) == 2

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,10 @@ class IdeaLookupError(LookupError):
 class BrokenFile:
     path: Path
     error: str
+
+
+def _title_key(title: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", " ", title.casefold()).split())
 
 
 class Store:
@@ -72,6 +77,11 @@ class Store:
             if len(matches) > 1:
                 raise IdeaLookupError(f"'{query}' matches {len(matches)} ideas", matches)
         raise IdeaLookupError(f"no idea matches '{query}'")
+
+    def same_title(self, title: str) -> list[Idea]:
+        """Ideas with the same title, ignoring case, spacing and punctuation."""
+        wanted = _title_key(title)
+        return [idea for idea in self.all() if _title_key(idea.title) == wanted]
 
     def all_tags(self) -> list[str]:
         """Every tag in use, once each (first spelling wins), sorted ignoring case."""

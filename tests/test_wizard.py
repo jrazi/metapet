@@ -271,3 +271,17 @@ def test_starting_the_list_again_rewrites_the_section(store):
     s, _ = session(store, [["export"]])
     wizard.ask_field(s, idea, S.field("features"))
     assert "## Features\n- export\n" in on_disk(store, idea).body
+
+
+def test_duplicate_name_can_be_cancelled(store):
+    store.create("Budget tracker")
+    s, p = session(store, ["budget tracker", False])
+    s.same_title = store.same_title
+    assert wizard.ask_name(s) is None
+    assert p.calls[1][1] == (
+        "An idea with this name already exists: budget-tracker (seed). Create another one anyway?"
+    )
+    assert p.messages[-1] == 'Nothing added. Add to it with pet note budget-tracker "..."'
+    s, p = session(store, ["budget tracker", True])
+    s.same_title, s.exists = store.same_title, store.exists
+    assert wizard.ask_name(s).id == "budget-tracker-2"

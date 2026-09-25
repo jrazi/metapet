@@ -146,3 +146,10 @@ def test_rename_refuses_existing_id(store):
     with pytest.raises(ValueError, match="single hyphens"):
         store.rename(one, "Bad Id")
     assert (store.home.ideas / "one.md").exists()
+
+
+def test_same_title_ignores_case_space_punctuation(store):
+    store.create("Budget tracker")
+    store.create("Other")
+    assert [i.id for i in store.same_title("budget  TRACKER!")] == ["budget-tracker"]
+    assert store.same_title("Budget") == []

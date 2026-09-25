@@ -153,7 +153,12 @@ def _prompter() -> Prompter:
 
 def _session(store: Store, idea_schema: Schema) -> wizard.Session:
     return wizard.Session(
-        idea_schema, _prompter(), store.save, store.all_tags(), exists=store.exists
+        idea_schema,
+        _prompter(),
+        store.save,
+        store.all_tags(),
+        exists=store.exists,
+        same_title=store.same_title,
     )
 
 
@@ -469,10 +474,12 @@ def add(
         title, note = _shorten_long_title(title, note, id_ is not None)
     except ValueError:
         _fail('a title is required: pet add "TITLE"')
+    same = store.same_title(title)
     try:
         idea = store.create(title, id=id_, tags=list(tag or []), body=note or "")
     except ValueError as exc:
         _fail(escape(str(exc)))
+    _note_same(same)
     _print_added(idea, verbose)
     if idea_schema is None:
         return
@@ -559,9 +566,12 @@ def new(
             _fail('a title is required: pet new "TITLE"')
         title, flagged[summary_key] = _shorten_long_title(title, summary, id_ is not None)
         idea_id = id_ or store.unique_id(title)
+        _note_same(store.same_title(title))
     else:
         with _stoppable():
             name = wizard.ask_name(session, title if title and title.strip() else None, id_)
+        if name is None:
+            return
         title, idea_id = name.title, name.id
         if name.extra_summary:
             flagged[summary_key] = _join_summary(summary, name.extra_summary)
@@ -577,6 +587,13 @@ def new(
     with _stoppable():
         wizard.new_idea(session, idea, supplied)
         wizard.continue_stages(session, idea)
+
+
+def _note_same(same: list[Idea]) -> None:
+    if same:
+        verb = "has" if len(same) == 1 else "have"
+        listed = ", ".join(i.id for i in same)
+        err.print(f"note: {escape(listed)} {verb} the same name", soft_wrap=True, highlight=False)
 
 
 def _changes(flagged: dict[str, str | None]) -> list[fields.Change]:

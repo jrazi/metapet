@@ -256,6 +256,7 @@ class PetApp(App[None]):
             self.store.all_tags(),
             started=self.hint_shown,
             exists=self.store.exists,
+            same_title=self.store.same_title,
         )
         self.sessions.append(s)
         return s
@@ -366,6 +367,8 @@ class PetApp(App[None]):
         def fn() -> None:
             s = self.session()
             name = wizard.ask_name(s)
+            if name is None:
+                return
             idea = self.store.create(name.title, id=name.id, body=name.extra_summary or "")
             created.append(idea.id)
             wizard.new_idea(s, idea, {"title"})

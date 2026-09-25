@@ -35,6 +35,7 @@ class Session:
     last_card: views.Card | None = None
     started: bool = False
     exists: Callable[[str], bool] = lambda _: False  # whether an idea id is taken
+    same_title: Callable[[str], list[Idea]] = lambda _: []  # ideas with the same title
 
 
 @dataclass(frozen=True)
@@ -161,8 +162,11 @@ def ask_id(s: Session, suggested: str) -> str:
 
 def ask_name(
     s: Session, supplied_title: str | None = None, supplied_id: str | None = None
-) -> Name:
-    """Ask for the title, a shorter one when it is long, and the id when it is not exact."""
+) -> Name | None:
+    """Ask for the title, a shorter one when it is long, and the id when it is not exact.
+
+    Returns None when the user decides not to add an idea with the same name as another.
+    """
     title = clean_title(supplied_title) if supplied_title else ask_title(s)
     extra = None
     if is_long_title(title) and s.prompter.confirm(LONG_TITLE_QUESTION, default=True):
@@ -174,6 +178,15 @@ def ask_name(
                 title = short
                 break
             s.prompter.message("A name is needed (Ctrl-C to cancel).")
+    same = s.same_title(title)
+    if same:
+        listed = ", ".join(f"{idea.id} ({idea.status.value})" for idea in same)
+        question = (
+            f"An idea with this name already exists: {listed}. Create another one anyway?"
+        )
+        if not s.prompter.confirm(question, default=False):
+            s.prompter.message(f'Nothing added. Add to it with pet note {same[0].id} "..."')
+            return None
     if supplied_id is not None:
         return Name(title, extra, supplied_id)
     suggestion = ids.suggest(title, s.today)
