@@ -640,7 +640,13 @@ def shelve(
     console.print(f"{idea.id}: {_status(Status.SHELVED)}  [dim]{reason}[/]")
 
 
-@app.command()
+@app.command(
+    help="Go through live ideas you have not looked at for a while.\n\n"
+    "An idea counts as looked at when it was created, changed or reviewed. In a terminal, "
+    "shows each idea, oldest first, and asks what to do with it: promote, refine, add a note, "
+    "set excitement, shelve, skip or quit. Anything but quit marks the idea as reviewed. "
+    "Outside a terminal, or with --no-input, only lists the ideas."
+)
 def review(
     ctx: typer.Context,
     days: Annotated[
@@ -649,13 +655,6 @@ def review(
     ] = 14,
     no_input: NoInput = False,
 ) -> None:
-    """Go through live ideas you have not looked at for a while.
-
-    An idea counts as looked at when it was created, changed or reviewed. In a terminal,
-    shows each idea, oldest first, and asks what to do with it: promote, refine, add a note,
-    set excitement, shelve, skip or quit. Anything but quit marks the idea as reviewed.
-    Outside a terminal, or with --no-input, only lists the ideas.
-    """
     store = _store(ctx)
     idea_schema = _schema(ctx)
     ideas = review_.due(store.all(), days)
