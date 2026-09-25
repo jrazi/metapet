@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+from collections import Counter
 from typing import Annotated
 
 import click
@@ -11,7 +13,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from metapet import paths, stages
+from metapet import paths, scoring, stages
 from metapet.model import Effort, Idea, Status
 from metapet.store import IdeaLookupError, Store
 
@@ -219,7 +221,7 @@ def list_ideas(
     ] = None,
     tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Filter by tag.")] = None,
     sort: Annotated[
-        str, typer.Option(help="Sort by: created, excitement, title.")
+        str, typer.Option(help="Sort by: created, excitement, score, title.")
     ] = "created",
     all_: Annotated[
         bool, typer.Option("--all", "-a", help="Include shipped and shelved ideas.")
@@ -237,6 +239,7 @@ def list_ideas(
     keys = {
         "created": lambda i: (i.created, i.id),
         "excitement": lambda i: (i.excitement or 0, i.created),
+        "score": lambda i: (scoring.score(i), i.created),
         "title": lambda i: i.title.lower(),
     }
     if sort not in keys:
@@ -301,3 +304,85 @@ def shelve(
     idea.shelved_reason = reason
     store.save(idea)
     console.print(f"{idea.id}: {_status(Status.SHELVED)}  [dim]{reason}[/]")
+
+
+# -- discovery ---------------------------------------------------------------
+
+
+@app.command()
+def search(ctx: typer.Context, text: Annotated[str, typer.Argument()]) -> None:
+    """Find ideas whose title, tags or body mention TEXT."""
+    needle = text.lower()
+    hits = [
+        idea
+        for idea in _store(ctx).all()
+        if needle in idea.title.lower()
+        or needle in idea.body.lower()
+        or any(needle in t.lower() for t in idea.tags)
+    ]
+    if not hits:
+        console.print(f"[dim]Nothing mentions '{text}'.[/]")
+        return
+    console.print(_ideas_table(hits))
+
+
+@app.command("next")
+def next_(
+    ctx: typer.Context,
+    count: Annotated[int, typer.Option("--count", "-n", help="How many to suggest.")] = 3,
+) -> None:
+    """Suggest what to work on: excited, cheap, further along, long-waiting first."""
+    ranked = scoring.rank(_store(ctx).all())[:count]
+    if not ranked:
+        console.print("[dim]No live ideas. Capture one with[/] pet add \"...\"")
+        return
+    ideas = [idea for idea, _ in ranked]
+    console.print(_ideas_table(ideas, {"score": [f"{value:.2f}" for _, value in ranked]}))
+
+
+@app.command("random")
+def random_(ctx: typer.Context) -> None:
+    """Resurface a random seed or sketch you may have forgotten."""
+    pool = [i for i in _store(ctx).all() if i.status in (Status.SEED, Status.SKETCH)]
+    if not pool:
+        console.print("[dim]No seeds or sketches to resurface.[/]")
+        return
+    _print_idea(random.choice(pool))
+
+
+@app.command()
+def stats(ctx: typer.Context) -> None:
+    """Counts by status, tag and month."""
+    ideas = _store(ctx).all()
+    if not ideas:
+        console.print("[dim]No ideas yet.[/]")
+        return
+    by_status = Counter(i.status for i in ideas)
+    by_tag = Counter(t.lower() for i in ideas for t in i.tags)
+    by_month = Counter(i.created.strftime("%Y-%m") for i in ideas)
+
+    table = Table(title=f"{len(ideas)} ideas", box=None, show_header=False)
+    table.add_column(style="bold")
+    table.add_column()
+    table.add_row(
+        "status", "  ".join(f"{_status(s)} {by_status[s]}" for s in Status if by_status[s])
+    )
+    if by_tag:
+        table.add_row("tags", "  ".join(f"{t} {n}" for t, n in by_tag.most_common(10)))
+    table.add_row("added", "  ".join(f"{m} {n}" for m, n in sorted(by_month.items())[-6:]))
+    console.print(table)
+
+
+@app.command()
+def check(ctx: typer.Context) -> None:
+    """Validate every idea file and report broken ones."""
+    store = _store(ctx)
+    ideas, broken = store.scan()
+    mismatched = [i for i in ideas if i.path and i.path.stem != i.id]
+    for bad in broken:
+        err.print(f"[red]✗[/] {bad.path.name}: {bad.error}")
+    for idea in mismatched:
+        err.print(f"[yellow]![/] {idea.path.name}: id is '{idea.id}' (rename the file to match)")
+    if broken:
+        raise typer.Exit(1)
+    console.print(f"[green]✓[/] {len(ideas)} ideas OK")
