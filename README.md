@@ -147,6 +147,7 @@ reports mistakes in your file. The old `templates/` folder is no longer used.
 | `pet promote ID [--to STATUS] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
 | `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
 | `pet shelve ID REASON` | Park an idea, remembering why |
+| `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
 | `pet search TEXT` | Search titles, tags and bodies |
 | `pet next [-n N]` | Suggest what to build next |
 | `pet random` | Resurface a forgotten seed or sketch |
@@ -156,9 +157,9 @@ reports mistakes in your file. The old `templates/` folder is no longer used.
 | `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |
 | `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump |
 
-`new`, `add -i`, `promote` and `refine` ask questions only when run in a terminal;
-`--no-input` turns the questions off, and outside a terminal they use only the values
-you give. Press Enter to skip a question and keep the current value; clear a value
+`new`, `add -i`, `promote`, `refine` and `review` ask questions only when run in a
+terminal; `--no-input` turns the questions off, and outside a terminal they use only
+the values you give. Press Enter to skip a question and keep the current value; clear a value
 with `pet set ID KEY=`. Every answer is saved right away, so Ctrl-C keeps the answers
 given so far.
 
@@ -167,6 +168,14 @@ given so far.
 Ranks by (excitement + impact) / effort weight (S=1, M=2, L=4, XL=8; missing values
 count as 3, 3 and M), plus up to 0.75 for later stages and up to 0.5 for ideas that
 have waited six months. Shipped and shelved ideas are excluded.
+
+### Reviewing ideas
+
+`pet review` shows the live ideas you have not looked at for a while, oldest first.
+An idea counts as looked at when it was created, changed or reviewed; the date of
+the last review is kept in the `reviewed` key. For each idea you can promote it,
+refine it, add a note, set its excitement, shelve it, skip it or quit. Anything but
+quit marks the idea as reviewed. Outside a terminal it only lists the ideas.
 
 ## Backing up your ideas
 
