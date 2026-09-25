@@ -1067,9 +1067,15 @@ def test_stats_labels(home):
     pet(home, "add", "B")
     pet(home, "shelve", "b", "later")
     output = pet(home, "stats").output
-    assert "2 ideas (1 live)" in output
+    assert "2 ideas (1 active)" in output
     assert "top tags" in output and "added (last 6 months)" in output
     assert f"{dt.date.today():%Y-%m} 2" in output
+
+
+def test_stats_singular_count(home):
+    pet(home, "init")
+    pet(home, "add", "A")
+    assert "1 idea (1 active)" in pet(home, "stats").output
 
 
 def test_last_months():

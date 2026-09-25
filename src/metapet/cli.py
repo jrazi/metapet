@@ -1297,8 +1297,8 @@ def stats(ctx: typer.Context) -> None:
     by_month = Counter(i.created.strftime("%Y-%m") for i in ideas)
     recent = _last_months(dt.date.today(), 6)
 
-    live = sum(1 for i in ideas if not i.status.terminal)
-    table = Table(title=f"{len(ideas)} ideas ({live} live)", box=None, show_header=False)
+    active = sum(1 for i in ideas if not i.status.terminal)
+    table = Table(title=f"{len(ideas)} {'idea' if len(ideas) == 1 else 'ideas'} ({active} active)", box=None, show_header=False)
     table.add_column(style="bold")
     table.add_column()
     table.add_row(
