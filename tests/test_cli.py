@@ -944,3 +944,43 @@ def test_refine_has_no_no_input(home):
     result = pet(home, "refine", "x", "--no-input")
     assert result.exit_code == 2
     assert "No such option" in result.output
+
+
+def test_ls_empty_store_vs_no_match(home):
+    pet(home, "init")
+    assert pet(home, "ls").output == 'No ideas yet. Capture one with pet add "..."\n'
+    pet(home, "add", "A")
+    assert pet(home, "ls", "-t", "nope").output == "No ideas match these filters.\n"
+
+
+def test_ls_hidden_footer(home, monkeypatch):
+    pet(home, "init")
+    pet(home, "add", "A")
+    pet(home, "add", "B")
+    pet(home, "shelve", "a", "x")
+    monkeypatch.setattr(cli, "console", Console(force_terminal=True, color_system=None, width=100))
+    output = pet(home, "ls").output
+    assert "1 shipped or shelved idea hidden (use -a)" in output
+    assert "hidden" not in pet(home, "ls", "-a").output
+
+
+def test_next_count_must_be_positive(home):
+    pet(home, "init")
+    pet(home, "add", "A")
+    for count in ("0", "-1"):
+        assert pet(home, "next", "-n", count).exit_code == 2
+
+
+def test_stats_labels(home):
+    pet(home, "init")
+    pet(home, "add", "A", "-t", "x")
+    pet(home, "add", "B")
+    pet(home, "shelve", "b", "later")
+    output = pet(home, "stats").output
+    assert "2 ideas (1 live)" in output
+    assert "top tags" in output and "added (last 6 months)" in output
+    assert f"{dt.date.today():%Y-%m} 2" in output
+
+
+def test_last_months():
+    assert cli._last_months(dt.date(2026, 2, 5), 3) == ["2025-12", "2026-01", "2026-02"]

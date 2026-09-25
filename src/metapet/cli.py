@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import random
 import sys
 from collections import Counter
@@ -682,14 +683,17 @@ def list_ideas(
 
     Shipped and shelved ideas are hidden unless you pass --all or filter by --status.
     """
-    ideas, broken = _store(ctx).scan()
+    everything, broken = _store(ctx).scan()
+    ideas = everything
+    if tag:
+        wanted = {t.casefold() for t in tag}
+        ideas = [i for i in ideas if wanted & {t.casefold() for t in i.tags}]
+    hidden = 0
     if status:
         ideas = [i for i in ideas if i.status in status]
     elif not all_:
+        hidden = sum(1 for i in ideas if i.status.terminal)
         ideas = [i for i in ideas if not i.status.terminal]
-    if tag:
-        wanted = {t.lower() for t in tag}
-        ideas = [i for i in ideas if wanted & {t.lower() for t in i.tags}]
     keys = {
         "created": lambda i: (i.created, i.id),
         "excitement": lambda i: (i.excitement or 0, i.created),
@@ -700,11 +704,16 @@ def list_ideas(
     if sort not in keys:
         _fail(f"unknown sort '{sort}'; choose from: {', '.join(keys)}")
     ideas.sort(key=keys[sort], reverse=sort != "title")
-    if not ideas:
-        console.print('[dim]No ideas match. Capture one with[/] pet add "..."')
+    if not everything:
+        console.print('No ideas yet. Capture one with pet add "..."', markup=False)
+    elif not ideas:
+        console.print("No ideas match these filters." if status or tag else "No live ideas.")
     else:
         extra = {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == "score" else None
         _print_ideas(ideas, extra)
+    if hidden and console.is_terminal:
+        what = "idea" if hidden == 1 else "ideas"
+        console.print(f"[dim]{hidden} shipped or shelved {what} hidden (use -a)[/]")
     _warn_broken(broken)
 
 
@@ -1104,7 +1113,9 @@ app.command("find", hidden=True)(search)
 @app.command("next")
 def next_(
     ctx: typer.Context,
-    count: Annotated[int, typer.Option("--count", "-n", help="How many to suggest.")] = 3,
+    count: Annotated[
+        int, typer.Option("--count", "-n", min=1, help="How many to suggest.")
+    ] = 3,
 ) -> None:
     """Suggest what to work on next.
 
@@ -1143,18 +1154,31 @@ def stats(ctx: typer.Context) -> None:
     by_status = Counter(i.status for i in ideas)
     by_tag = Counter(t for i in ideas for t in {tag.casefold() for tag in i.tags})
     by_month = Counter(i.created.strftime("%Y-%m") for i in ideas)
+    recent = _last_months(dt.date.today(), 6)
 
-    table = Table(title=f"{len(ideas)} ideas", box=None, show_header=False)
+    live = sum(1 for i in ideas if not i.status.terminal)
+    table = Table(title=f"{len(ideas)} ideas ({live} live)", box=None, show_header=False)
     table.add_column(style="bold")
     table.add_column()
     table.add_row(
         "status", "  ".join(f"{_status(s)} {by_status[s]}" for s in Status if by_status[s])
     )
     if by_tag:
-        table.add_row("tags", "  ".join(f"{escape(t)} {n}" for t, n in by_tag.most_common(10)))
-    table.add_row("added", "  ".join(f"{m} {n}" for m, n in sorted(by_month.items())[-6:]))
+        top = "  ".join(f"{escape(t)} {n}" for t, n in by_tag.most_common(10))
+        table.add_row("top tags", top)
+    months = "  ".join(f"{m} {by_month[m]}" for m in recent if by_month[m]) or "none"
+    table.add_row("added (last 6 months)", months)
     console.print(table)
     _warn_broken(broken)
+
+
+def _last_months(today: dt.date, count: int) -> list[str]:
+    """The last `count` months up to today, oldest first, as YYYY-MM."""
+    months = []
+    for back in range(count - 1, -1, -1):
+        year, index = divmod(today.year * 12 + today.month - 1 - back, 12)
+        months.append(f"{year:04d}-{index + 1:02d}")
+    return months
 
 
 @app.command("stages")
