@@ -46,7 +46,32 @@ def test_promote_from_shelved_clears_the_reason():
     idea = Idea(id="x", title="X", status=Status.SHELVED, shelved_reason="later")
     stages.promote(idea, Status.SKETCH, S)
     assert idea.shelved_reason is None and idea.status == Status.SKETCH
-    assert "## Problem" not in idea.body
+
+
+def test_back_from_the_shelf_gets_the_stage_sections_and_drops_empty_retro():
+    idea = Idea(id="x", title="X")
+    stages.shelve(idea, "why", S)
+    assert "## Retro" in idea.body
+    stages.promote(idea, Status.SKETCH, S)
+    assert "## Problem" in idea.body and "## Rough solution" in idea.body
+    assert "## Retro" not in idea.body
+    stages.shelve(idea, "again", S)
+    stages.promote(idea, Status.SEED, S)
+    assert "## Retro" not in idea.body
+
+
+def test_back_from_the_shelf_keeps_a_written_retro():
+    idea = Idea(id="x", title="X", status=Status.SHELVED, body="## Retro\nLearned a lot.")
+    stages.promote(idea, Status.SPEC, S)
+    assert "Learned a lot." in idea.body and "## MVP scope" in idea.body
+
+
+def test_shipped_moved_back_drops_empty_retro():
+    idea = Idea(id="x", title="X", status=Status.BUILDING)
+    stages.move(idea, Status.SHIPPED, S)
+    assert "## Retro" in idea.body
+    stages.promote(idea, Status.BUILDING, S)
+    assert "## Retro" not in idea.body and idea.status == Status.BUILDING
 
 
 def test_before():

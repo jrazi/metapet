@@ -112,8 +112,9 @@ empty: if an expected field of an earlier stage is empty, promote warns and move
 idea anyway. In a terminal it first offers to fill those fields, then asks the
 questions of the new stage that are still empty; any question can be skipped, and
 answered ones are changed with `pet refine`. Moving back (`--to` an earlier stage)
-adds and removes nothing. `pet check` lists the empty
-expected fields of every idea.
+adds and removes nothing. A shelved or shipped idea moved back with `--to STAGE` gets
+the sections of every stage up to STAGE, and an empty Retro section is removed.
+`pet check` lists the empty expected fields of every idea.
 
 Fill fields by answering questions with `pet refine ID`, with `pet set ID KEY=VALUE`,
 `pet note ID TEXT` or `pet edit ID --field KEY`, or edit the file by hand. Headings match fields by name or key,

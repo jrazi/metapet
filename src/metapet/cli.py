@@ -1015,8 +1015,9 @@ app.command("delete", hidden=True)(rm)
 @app.command(
     help="Move an idea to its next stage, adding that stage's sections.\n\n"
     "Moves one stage forward by default. --to can skip stages (each skipped stage still adds "
-    "its sections) or move back (adds and removes nothing). A shelved idea returns with "
-    "--to STAGE.\n\n"
+    "its sections) or move back (adds and removes nothing). A shelved or shipped idea "
+    "returns with --to STAGE; it gets the sections of every stage up to STAGE, and an empty "
+    "Retro section is removed.\n\n"
     "In a terminal, a forward move offers to fill expected fields that are still empty, "
     "shows the idea, then asks the questions of each new stage that are still empty; every "
     "question can be skipped, and answered ones are changed with pet refine. "
