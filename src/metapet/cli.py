@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import random
+import sys
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, NoReturn
 
@@ -15,8 +18,9 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
-from metapet import export, fields, paths, schema, scoring, stages, sync
+from metapet import export, fields, paths, schema, scoring, stages, sync, wizard
 from metapet.model import Idea, Status
+from metapet.prompter import Prompter
 from metapet.schema import Schema, SchemaError, Storage
 from metapet.store import IdeaLookupError, Store
 
@@ -112,6 +116,39 @@ def _schema(ctx: typer.Context) -> Schema:
         return schema.load(ctx.obj)
     except SchemaError as exc:
         _fail(escape(str(exc)))
+
+
+def _interactive(no_input: bool) -> bool:
+    """Whether questions can be asked: not turned off, and both ends are a terminal."""
+    return not no_input and sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _prompter() -> Prompter:
+    from metapet.questionary_prompter import QuestionaryPrompter
+
+    return QuestionaryPrompter(console)
+
+
+def _session(store: Store, idea_schema: Schema) -> wizard.Session:
+    return wizard.Session(idea_schema, _prompter(), store.save, store.all_tags())
+
+
+@contextmanager
+def _stoppable() -> Iterator[None]:
+    """Turn Ctrl-C during questions into a short message and exit code 130."""
+    try:
+        yield
+    except KeyboardInterrupt:
+        err.print("Stopped. Answers so far are saved.")
+        raise typer.Exit(130) from None
+
+
+def _field(idea_schema: Schema, name: str) -> schema.Field:
+    try:
+        return idea_schema.field(name)
+    except KeyError:
+        known = ", ".join(f.key for f in idea_schema.all_fields())
+        _fail(f"unknown field '{escape(name)}'; known fields: {known}")
 
 
 def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
@@ -262,14 +299,41 @@ def add(
     title: Annotated[str, typer.Argument(help="The idea, in a few words.")],
     tag: Annotated[list[str] | None, typer.Option("--tag", "-t", help="Tag (repeatable).")] = None,
     note: Annotated[str | None, typer.Option("--note", "-m", help="One-line description.")] = None,
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive", "-i", help="Then ask the other seed questions (in a terminal only)."
+        ),
+    ] = False,
 ) -> None:
     """Capture a seed instantly, without opening an editor.
 
     Grow it later with pet promote ID (see pet promote --help for the stages).
     """
     store = _store(ctx)
+    idea_schema = _schema(ctx) if interactive else None
     idea = store.create(title, tags=list(tag or []), body=note or "")
     console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
+    if idea_schema is None:
+        return
+    if not _interactive(False):
+        err.print("note: not a terminal, skipping questions")
+        return
+    supplied = {"title"}
+    if tag:
+        supplied.add("tags")
+    if note:
+        supplied.add(_summary_key(idea_schema))
+    session = _session(store, idea_schema)
+    with _stoppable():
+        wizard.new_idea(session, idea, supplied)
+        wizard.continue_stages(session, idea)
+
+
+def _summary_key(idea_schema: Schema) -> str:
+    return next(
+        (f.key for f in idea_schema.all_fields() if f.storage == Storage.SUMMARY), "summary"
+    )
 
 
 @app.command()
@@ -296,17 +360,21 @@ def new(
 ) -> None:
     """Capture an idea with its seed fields.
 
+    In a terminal, asks for the title if it is not given, then for the seed fields you did not
+    pass as options, and offers to go on to the next stages. Every question can be skipped.
     Fields of later stages can be filled right away with --set.
     """
     store = _store(ctx)
     idea_schema = _schema(ctx)
+    interactive = _interactive(no_input)
+    session = _session(store, idea_schema) if interactive else None
     if not title or not title.strip():
-        _fail('a title is required: pet new "TITLE"')
-    summary_key = next(
-        (f.key for f in idea_schema.all_fields() if f.storage == Storage.SUMMARY), "summary"
-    )
+        if session is None:
+            _fail('a title is required: pet new "TITLE"')
+        with _stoppable():
+            title = wizard.ask_title(session)
     flagged = {
-        summary_key: summary,
+        _summary_key(idea_schema): summary,
         "tags": ",".join(tag) if tag else None,
         "excitement": excitement,
     }
@@ -328,6 +396,13 @@ def new(
     idea.updated = None  # just created
     store.save(idea)
     console.print(f"[green]+[/] {idea.id}  [dim]{idea.path}[/]", soft_wrap=True)
+    if session is None:
+        return
+    supplied = {"title", *(key for key, value in flagged.items() if value is not None)}
+    supplied |= {c.key.lower().replace("-", "_") for c in extra}
+    with _stoppable():
+        wizard.new_idea(session, idea, supplied)
+        wizard.continue_stages(session, idea)
 
 
 # -- browsing ----------------------------------------------------------------
@@ -399,11 +474,7 @@ def edit(
         click.edit(filename=str(idea.path))
         return
     idea_schema = _schema(ctx)
-    try:
-        field = idea_schema.field(field_name)
-    except KeyError:
-        known = ", ".join(f.key for f in idea_schema.all_fields())
-        _fail(f"unknown field '{escape(field_name)}'; known fields: {known}")
+    field = _field(idea_schema, field_name)
     if field.storage == Storage.FRONTMATTER:
         _fail(f"'{field.key}' is stored in the frontmatter; use pet set ID {field.key}=VALUE")
     current = fields.raw(idea, field)
@@ -469,8 +540,11 @@ def note(
     help="Move an idea to its next stage, adding that stage's sections.\n\n"
     "Moves one stage forward by default. --to can skip stages (each skipped stage still adds "
     "its sections) or move back (adds and removes nothing). A shelved idea returns with "
-    "--to STAGE. If expected fields of earlier stages are empty, promote warns and moves "
-    "the idea anyway.\n\n" + LIFECYCLE_HELP
+    "--to STAGE.\n\n"
+    "In a terminal, a forward move shows the idea, offers to fill expected fields that are "
+    "still empty, then asks the questions of each new stage; every question can be skipped. "
+    "With --no-input, or outside a terminal, promote only warns about empty expected fields "
+    "and moves the idea anyway.\n\n" + LIFECYCLE_HELP
 )
 def promote(
     ctx: typer.Context,
@@ -490,6 +564,15 @@ def promote(
         _fail("use `pet shelve ID REASON` to shelve an idea.")
     old = idea.status
     forward = bool(stages.statuses_between(old, target))
+    if forward and old in stages.LIFECYCLE and _interactive(no_input):
+        with _stoppable():
+            if not wizard.promote(_session(store, idea_schema), idea, target):
+                console.print("Not promoted.")
+                return
+        console.print(
+            f"{idea.id}: {_status(old)} → {_status(target)}  [dim]{idea.path}[/]", soft_wrap=True
+        )
+        return
     gaps = stages.gaps(idea, idea_schema, stages.before(target)) if forward else []
     stages.promote(idea, target, idea_schema)
     store.save(idea)
@@ -499,10 +582,42 @@ def promote(
     if gaps:
         labels = escape(", ".join(f.label for f in gaps))
         err.print(
-            f"[yellow]warning:[/] still empty: {labels} (fill them with "
-            f"pet set {idea.id} KEY=VALUE or pet edit {idea.id} --field KEY)",
+            f"[yellow]warning:[/] still empty: {labels} (fill them with pet refine {idea.id})",
             soft_wrap=True,
         )
+
+
+@app.command()
+def refine(
+    ctx: typer.Context,
+    idea_id: IdArg,
+    field_name: Annotated[
+        str | None,
+        typer.Argument(metavar="FIELD", help="Only this field (key or heading)."),
+    ] = None,
+    no_input: NoInput = False,
+) -> None:
+    """Answer an idea's questions again, or fill the ones you skipped.
+
+    Without FIELD, pick fields from a list ([x] filled, [ ] empty) until you choose Done. Only
+    fields of the idea's stage and the stages before it are offered. The stage does not
+    change. Needs a terminal.
+    """
+    store = _store(ctx)
+    idea_schema = _schema(ctx)
+    idea = _find(store, idea_id)
+    field = None
+    if field_name is not None:
+        field = _field(idea_schema, field_name)
+        if field.key not in {f.key for f in idea_schema.fields_upto(idea.status)}:
+            _fail(
+                f"'{field.key}' belongs to the {field.stage} stage; "
+                f"use pet set ID {field.key}=... or promote first"
+            )
+    if not _interactive(no_input):
+        _fail("refine needs a terminal; use pet set ID KEY=VALUE or pet edit ID --field KEY")
+    with _stoppable():
+        wizard.refine(_session(store, idea_schema), idea, field)
 
 
 @app.command()
