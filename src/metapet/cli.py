@@ -565,14 +565,16 @@ def init(
         except sync.SyncError as exc:
             _fail(str(exc))
         target = f" → {remote}" if remote else ""
-        console.print(f"Git backup enabled{target}; run [bold]pet sync[/] to back up.")
+        console.print(
+            f"Git backup enabled{target}; run [bold]pet sync[/] to back up.", soft_wrap=True
+        )
 
 
 @app.command()
 def where(ctx: typer.Context) -> None:
     """Show which data directory is in use, and why."""
     home: paths.DataHome = ctx.obj
-    state = "" if home.exists else "  [yellow](not initialized — run `pet init`)[/]"
+    state = "" if home.exists else "  [yellow](not initialized; run `pet init`)[/]"
     console.print(f"{home.path}  [dim]← {home.source}[/]{state}", soft_wrap=True)
 
 
@@ -598,7 +600,7 @@ def add(
     id_: IdOption = None,
     verbose: Verbose = False,
 ) -> None:
-    """Capture a seed instantly, without opening an editor.
+    """Add an idea with just a title, without opening an editor.
 
     Grow it later with pet promote ID (see pet promote --help for the stages).
     """
@@ -1119,7 +1121,7 @@ def shelve(
     idea_id: IdArg,
     reason: Annotated[str, typer.Argument(metavar="REASON", help="Why you're putting it aside.")],
 ) -> None:
-    """Shelve an idea, keeping the reason for future you.
+    """Shelve an idea and record why.
 
     Shelved ideas are hidden from ls and next (see them with ls -a) and gain a Retro
     section. The reason is also added to Notes, with the date. Bring one back with: pet

@@ -53,7 +53,8 @@ def _link(idea: Idea, target_dir: Path) -> str:
 def to_markdown(ideas: list[Idea], target_dir: Path | None = None) -> str:
     """A Markdown index; links are relative to target_dir, where the index is written."""
     target_dir = target_dir or Path.cwd()
-    lines = ["# Ideas", "", f"_{len(ideas)} ideas · exported {dt.date.today()}_", ""]
+    count = "1 idea" if len(ideas) == 1 else f"{len(ideas)} ideas"
+    lines = ["# Ideas", "", f"_{count} · exported {dt.date.today()}_", ""]
     for status in Status:
         group = sorted((i for i in ideas if i.status == status), key=lambda i: i.created)
         if not group:
