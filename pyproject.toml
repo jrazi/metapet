@@ -1,0 +1,36 @@
+[project]
+name = "metapet"
+version = "0.1.0"
+description = "A tiny CLI for capturing and growing pet-project ideas"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "platformdirs>=4.2",
+    "python-frontmatter>=1.1",
+    "rich>=13.7",
+    "typer>=0.12",
+]
+
+[project.scripts]
+pet = "metapet.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

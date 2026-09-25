@@ -1,0 +1,14 @@
+# Portable-mode idea storage — never committed
+/data/
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
