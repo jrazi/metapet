@@ -289,3 +289,27 @@ def test_empty_store_keys_say_how_to_add(store):
         assert notices(app) == [EMPTY_STORE]
 
     run(app, test)
+
+
+def test_unreadable_file_is_listed_and_editable(store, monkeypatch):
+    seeded(store)
+    path = store.home.ideas / "pomo.md"
+    path.write_text("---\ntitle: [unclosed\n---\n")
+    edited = []
+    monkeypatch.setattr("metapet.tui.click.edit", lambda filename=None, **kw: edited.append(filename))
+    app, _ = make_app(store)
+
+    async def test(pilot):
+        select(app, "pomo")
+        table = app.query_one("#ideas", DataTable)
+        assert str(table.get_row("pomo")[2]) == "unreadable"
+        assert "cannot be read" in app.query_one("#preview").source
+        await pilot.press("n")
+        await pilot.pause()
+        assert notices(app)[-1] == "Fix this file first (press e)."
+        await pilot.press("e")
+        await pilot.pause()
+        assert edited == [str(path)]
+        assert app.current_id() == "pomo"
+
+    run(app, test)

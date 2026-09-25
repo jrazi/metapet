@@ -759,3 +759,37 @@ def test_edit_reports_broken_frontmatter(home, monkeypatch):
     assert result.exit_code == 1
     assert "budget-tracker.md cannot be read" in result.output
     assert "pet check" in result.output
+
+
+def test_ls_warns_about_unreadable_files(home):
+    pet(home, "init")
+    pet(home, "add", "Budget tracker")
+    (home.ideas / "pomo.md").write_text("---\ntitle: [unclosed\n---\n")
+    for args in (["ls"], ["next"], ["search", "budget"], ["stats"], ["review"]):
+        result = pet(home, *args)
+        assert result.exit_code == 0, (args, result.output)
+        assert (
+            "warning: 1 idea file could not be read (pet check shows why): pomo.md"
+            in result.output
+        ), args
+    result = pet(home, "show", "pomo")
+    assert result.exit_code == 1
+    assert "pomo.md cannot be read" in result.output
+    assert "fix it with pet edit pomo" in result.output
+
+
+def test_edit_opens_unreadable_file(home, monkeypatch):
+    pet(home, "init")
+    path = home.ideas / "pomo.md"
+    path.write_text("---\ntitle: [unclosed\n---\n")
+    opened = []
+
+    def fixing_edit(filename=None, **kwargs):
+        opened.append(filename)
+        path.write_text("---\nid: pomo\ntitle: Pomodoro\nstatus: seed\ncreated: 2026-01-01\n---\n")
+
+    monkeypatch.setattr(cli.click, "edit", fixing_edit)
+    result = pet(home, "edit", "pomo")
+    assert result.exit_code == 0, result.output
+    assert opened == [str(path)]
+    assert "Pomodoro" in pet(home, "show", "pomo").output

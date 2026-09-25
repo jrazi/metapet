@@ -153,3 +153,12 @@ def test_same_title_ignores_case_space_punctuation(store):
     store.create("Other")
     assert [i.id for i in store.same_title("budget  TRACKER!")] == ["budget-tracker"]
     assert store.same_title("Budget") == []
+
+
+def test_find_names_unreadable_file(store):
+    store.create("Budget tracker")
+    (store.home.ideas / "pomo.md").write_text("---\ntitle: [unclosed\n---\n")
+    with pytest.raises(IdeaLookupError, match="pomo.md cannot be read: .*fix it with pet edit pomo"):
+        store.find("pomo")
+    assert store.find_path("pomo") == store.home.ideas / "pomo.md"
+    assert store.find_path("budget") == store.home.ideas / "budget-tracker.md"

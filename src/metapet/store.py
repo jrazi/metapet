@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
 
 from metapet import ids
 from metapet.model import Idea, IdeaError, clean_title
 from metapet.paths import DataHome
+
+T = TypeVar("T")
 
 
 class IdeaLookupError(LookupError):
@@ -24,6 +28,20 @@ class IdeaLookupError(LookupError):
 class BrokenFile:
     path: Path
     error: str
+
+
+def _match(query: str, items: list[T], names: Callable[[T], tuple[str, str]]) -> list[T]:
+    """Items matching by exact id, else id prefix, else a fragment of the id or title."""
+    q = query.lower().strip()
+    for tier in (
+        lambda id_, title: id_ == q,
+        lambda id_, title: id_.startswith(q),
+        lambda id_, title: q in id_ or q in title.lower(),
+    ):
+        matches = [item for item in items if tier(*names(item))]
+        if matches:
+            return matches
+    return []
 
 
 def _title_key(title: str) -> str:
@@ -63,20 +81,36 @@ class Store:
         return self.scan()[0]
 
     def find(self, query: str) -> Idea:
-        """Match by exact id, then id prefix, then substring of id or title."""
-        ideas = self.all()
-        q = query.lower().strip()
-        for tier in (
-            lambda i: i.id == q,
-            lambda i: i.id.startswith(q),
-            lambda i: q in i.id or q in i.title.lower(),
-        ):
-            matches = [idea for idea in ideas if tier(idea)]
-            if len(matches) == 1:
-                return matches[0]
-            if len(matches) > 1:
-                raise IdeaLookupError(f"'{query}' matches {len(matches)} ideas", matches)
+        """Match by exact id, then id prefix, then substring of id or title.
+
+        When nothing matches but an unreadable file does, the error says so.
+        """
+        ideas, broken = self.scan()
+        matches = _match(query, ideas, lambda i: (i.id, i.title))
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise IdeaLookupError(f"'{query}' matches {len(matches)} ideas", matches)
+        hits = _match(query, broken, lambda b: (b.path.stem.lower(), ""))
+        if len(hits) == 1:
+            bad = hits[0]
+            raise IdeaLookupError(
+                f"{bad.path.name} cannot be read: {bad.error}; fix it with pet edit {bad.path.stem}"
+            )
         raise IdeaLookupError(f"no idea matches '{query}'")
+
+    def find_path(self, query: str) -> Path:
+        """Like find, but also finds files that cannot be read, so they can be fixed."""
+        try:
+            idea = self.find(query)
+        except IdeaLookupError as exc:
+            if exc.candidates:
+                raise
+            hits = _match(query, self.scan()[1], lambda b: (b.path.stem.lower(), ""))
+            if len(hits) != 1:
+                raise
+            return hits[0].path
+        return idea.path or self.home.ideas / f"{idea.id}.md"
 
     def same_title(self, title: str) -> list[Idea]:
         """Ideas with the same title, ignoring case, spacing and punctuation."""

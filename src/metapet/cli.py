@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal, NoReturn
+from typing import Annotated, Literal, NoReturn, TypeVar
 
 import click
 import typer
@@ -25,7 +25,10 @@ from metapet import review as review_
 from metapet.model import Idea, IdeaError, Status, clean_title, is_long_title, short_title
 from metapet.prompter import Prompter
 from metapet.schema import Schema, SchemaError, Storage
-from metapet.store import IdeaLookupError, Store
+from metapet.store import BrokenFile, IdeaLookupError, Store
+
+
+T = TypeVar("T")
 
 
 def _stage_rows(idea_schema: Schema) -> list[str]:
@@ -121,9 +124,26 @@ def _fail(message: str) -> NoReturn:
     raise typer.Exit(1)
 
 
+def _warn_broken(broken: list[BrokenFile]) -> None:
+    """One line on stderr naming the idea files that could not be read."""
+    if not broken:
+        return
+    count = len(broken)
+    files = ", ".join(b.path.name for b in broken)
+    what = "1 idea file" if count == 1 else f"{count} idea files"
+    err.print(
+        f"[yellow]warning:[/] {what} could not be read (pet check shows why): {escape(files)}",
+        soft_wrap=True,
+    )
+
+
 def _find(store: Store, query: str) -> Idea:
+    return _lookup(store.find, query)
+
+
+def _lookup(find: Callable[[str], T], query: str) -> T:
     try:
-        return store.find(query)
+        return find(query)
     except IdeaLookupError as exc:
         if exc.candidates:
             ids = "\n".join(
@@ -646,7 +666,7 @@ def list_ideas(
 
     Shipped and shelved ideas are hidden unless you pass --all or filter by --status.
     """
-    ideas = _store(ctx).all()
+    ideas, broken = _store(ctx).scan()
     if status:
         ideas = [i for i in ideas if i.status in status]
     elif not all_:
@@ -666,9 +686,10 @@ def list_ideas(
     ideas.sort(key=keys[sort], reverse=sort != "title")
     if not ideas:
         console.print('[dim]No ideas match. Capture one with[/] pet add "..."')
-        return
-    extra = {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == "score" else None
-    _print_ideas(ideas, extra)
+    else:
+        extra = {"score": [f"{scoring.score(i):.2f}" for i in ideas]} if sort == "score" else None
+        _print_ideas(ideas, extra)
+    _warn_broken(broken)
 
 
 @app.command()
@@ -690,10 +711,11 @@ def edit(
 ) -> None:
     """Open an idea in $EDITOR, or just one of its fields with --field."""
     store = _store(ctx)
-    idea = _find(store, idea_id)
     if field_name is None:
-        _edit_file(idea.path)
+        # Files that cannot be read are opened too, so they can be fixed.
+        _edit_file(_lookup(store.find_path, idea_id))
         return
+    idea = _find(store, idea_id)
     idea_schema = _schema(ctx)
     field = _field(idea_schema, field_name)
     if field.storage == Storage.FRONTMATTER:
@@ -969,17 +991,21 @@ def review(
 ) -> None:
     store = _store(ctx)
     idea_schema = _schema(ctx)
-    ideas = review_.due(store.all(), days)
+    all_ideas, broken = store.scan()
+    ideas = review_.due(all_ideas, days)
     if not ideas:
         console.print(f"Nothing to review. Everything was looked at in the last {days} days.")
+        _warn_broken(broken)
         return
     if not _interactive(no_input):
         seen = [review_.last_seen(idea).isoformat() for idea in ideas]
         _print_ideas(ideas, {"last seen": seen}, created=False)
         err.print("Run pet review in a terminal to go through them.")
+        _warn_broken(broken)
         return
     result = review_.run(_session(store, idea_schema), ideas)
     console.print(f"Reviewed {result.handled}, {result.remaining} left.")
+    _warn_broken(broken)
     if result.stopped:
         err.print("Stopped. Answers so far are saved.")
         raise typer.Exit(130)
@@ -1012,17 +1038,19 @@ def _run_ui(ctx: typer.Context) -> None:
 def search(ctx: typer.Context, text: Annotated[str, typer.Argument()]) -> None:
     """Find ideas whose title, tags or body mention TEXT."""
     needle = text.lower()
+    ideas, broken = _store(ctx).scan()
     hits = [
         idea
-        for idea in _store(ctx).all()
+        for idea in ideas
         if needle in idea.title.lower()
         or needle in idea.body.lower()
         or any(needle in t.lower() for t in idea.tags)
     ]
     if not hits:
         console.print(f"[dim]Nothing mentions '{escape(text)}'.[/]")
-        return
-    _print_ideas(hits)
+    else:
+        _print_ideas(hits)
+    _warn_broken(broken)
 
 
 app.command("list", hidden=True)(list_ideas)
@@ -1040,12 +1068,14 @@ def next_(
     as 3, 3 and M), plus up to 0.75 for later stages and up to 0.5 for ideas that have waited
     six months.
     """
-    ranked = scoring.rank(_store(ctx).all())[:count]
+    all_ideas, broken = _store(ctx).scan()
+    ranked = scoring.rank(all_ideas)[:count]
     if not ranked:
         console.print('[dim]No live ideas. Capture one with[/] pet add "..."')
-        return
-    ideas = [idea for idea, _ in ranked]
-    _print_ideas(ideas, {"score": [f"{value:.2f}" for _, value in ranked]})
+    else:
+        ideas = [idea for idea, _ in ranked]
+        _print_ideas(ideas, {"score": [f"{value:.2f}" for _, value in ranked]})
+    _warn_broken(broken)
 
 
 @app.command("random")
@@ -1061,9 +1091,10 @@ def random_(ctx: typer.Context) -> None:
 @app.command()
 def stats(ctx: typer.Context) -> None:
     """Counts by status, tag and month."""
-    ideas = _store(ctx).all()
+    ideas, broken = _store(ctx).scan()
     if not ideas:
         console.print("[dim]No ideas yet.[/]")
+        _warn_broken(broken)
         return
     by_status = Counter(i.status for i in ideas)
     by_tag = Counter(t.lower() for i in ideas for t in i.tags)
@@ -1079,6 +1110,7 @@ def stats(ctx: typer.Context) -> None:
         table.add_row("tags", "  ".join(f"{escape(t)} {n}" for t, n in by_tag.most_common(10)))
     table.add_row("added", "  ".join(f"{m} {n}" for m, n in sorted(by_month.items())[-6:]))
     console.print(table)
+    _warn_broken(broken)
 
 
 @app.command("stages")

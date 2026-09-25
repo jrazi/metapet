@@ -152,7 +152,7 @@ class Idea:
         try:
             post = frontmatter.loads(text)
         except Exception as exc:  # yaml errors come in many flavours
-            raise IdeaError(f"unreadable frontmatter: {exc}") from exc
+            raise IdeaError(f"unreadable frontmatter: {_yaml_problem(exc)}") from exc
         meta = dict(post.metadata)
         missing = [key for key in REQUIRED_KEYS if not meta.get(key)]
         if missing:
@@ -189,6 +189,16 @@ class Idea:
 
     def mark_reviewed(self, today: dt.date | None = None) -> None:
         self.reviewed = today or dt.date.today()
+
+
+def _yaml_problem(exc: Exception) -> str:
+    """A YAML error in one line, with the line number in the file when known."""
+    problem = getattr(exc, "problem", None)
+    mark = getattr(exc, "problem_mark", None)
+    if problem and mark is not None:
+        # The frontmatter text starts on the first --- line, and marks count from 0.
+        return f"{problem} (line {mark.line + 1})"
+    return " ".join(str(exc).split())
 
 
 def _as_date(value: Any) -> dt.date | None:

@@ -25,11 +25,13 @@ from metapet.model import Idea, IdeaError, Status
 from metapet.prompter import Prompter
 from metapet.review import EXCITEMENT
 from metapet.schema import Schema
-from metapet.store import Store
+from metapet.store import BrokenFile, Store
 
 EMPTY_STORE = "No ideas yet. Press a to add one."
 NOTICE_SECONDS = 3
 NO_MATCH = "No ideas match the filter."
+UNREADABLE = "unreadable"
+FIX_FIRST = "Fix this file first (press e)."
 EMPTY_ANSWER = "Type something, or press Escape to cancel."
 STATUS_STYLE = {
     Status.SEED: "green",
@@ -39,6 +41,13 @@ STATUS_STYLE = {
     Status.SHIPPED: "bold yellow",
     Status.SHELVED: "dim",
 }
+
+
+def _key(item: Idea | BrokenFile) -> str:
+    """A row's key: the file name without .md (the id, for files named after it)."""
+    if isinstance(item, BrokenFile):
+        return item.path.stem
+    return item.path.stem if item.path else item.id
 
 
 class TextPrompt(ModalScreen[str | None]):
@@ -157,8 +166,8 @@ class PetApp(App[None]):
         self.prompter = prompter
         self.run_outside = run_outside or self._suspend_and_run
         self.ideas: list[Idea] = []
-        self.shown: list[Idea] = []
-        self.broken = 0
+        self.shown: list[Idea | BrokenFile] = []
+        self.broken_files: list[BrokenFile] = []
         self.hint_shown = False  # the "Press Enter to skip" hint, shown once per run
         self.last_notice = ""
         self.last_notice_time = 0.0
@@ -190,17 +199,17 @@ class PetApp(App[None]):
     # -- data --------------------------------------------------------------------
 
     def reload(self, select: str | None = None) -> None:
-        """Read the store again and keep the cursor on `select` or the current idea."""
+        """Read the store again and keep the cursor on `select` or the current row."""
         keep = select or self.current_id()
         ideas, broken = self.store.scan()
-        if broken and len(broken) != self.broken:
+        if broken and len(broken) != len(self.broken_files):
             count = len(broken)
             self.notify(
                 f"{count} idea file{'' if count == 1 else 's'} could not be read; "
-                "run pet check to see why.",
+                "they are listed as unreadable. Press e on one to fix it.",
                 severity="warning",
             )
-        self.broken = len(broken)
+        self.broken_files = broken
         self.ideas = sorted(ideas, key=lambda i: (i.created, i.id), reverse=True)
         self.fill_table(keep)
 
@@ -208,50 +217,77 @@ class PetApp(App[None]):
         table = self.table
         row = table.cursor_row
         table.clear()
-        self.shown = views.filter_ideas(self.ideas, self.filter_input.value)
-        for idea in self.shown:
+        query = self.filter_input.value
+        words = query.casefold().split()
+        broken = [b for b in self.broken_files if all(w in b.path.name.casefold() for w in words)]
+        self.shown = [*broken, *views.filter_ideas(self.ideas, query)]
+        for item in self.shown:
+            if isinstance(item, BrokenFile):
+                table.add_row(
+                    Text(item.path.stem),
+                    Text(item.path.name),
+                    Text(UNREADABLE, style="bold red"),
+                    "",
+                    "",
+                    "",
+                    key=_key(item),
+                )
+                continue
             table.add_row(
-                Text(idea.id),
-                Text(idea.title),
-                Text(idea.status.value, style=STATUS_STYLE[idea.status]),
-                str(idea.excitement or ""),
-                str(idea.impact or ""),
-                idea.effort.value if idea.effort else "",
-                key=idea.id,
+                Text(item.id),
+                Text(item.title),
+                Text(item.status.value, style=STATUS_STYLE[item.status]),
+                str(item.excitement or ""),
+                str(item.impact or ""),
+                item.effort.value if item.effort else "",
+                key=_key(item),
             )
-        ids = [idea.id for idea in self.shown]
-        if keep in ids:
-            row = ids.index(keep)
+        keys = [_key(item) for item in self.shown]
+        if keep in keys:
+            row = keys.index(keep)
         if self.shown:
-            table.move_cursor(row=max(0, min(row, len(ids) - 1)))
+            table.move_cursor(row=max(0, min(row, len(keys) - 1)))
         self.show_preview()
 
-    def current(self) -> Idea | None:
+    def current_item(self) -> Idea | BrokenFile | None:
         row = self.table.cursor_row
         return self.shown[row] if 0 <= row < len(self.shown) else None
 
+    def current(self) -> Idea | None:
+        item = self.current_item()
+        return item if isinstance(item, Idea) else None
+
     def current_id(self) -> str | None:
-        idea = self.current()
-        return idea.id if idea else None
+        """The key of the row under the cursor: the file name without .md."""
+        item = self.current_item()
+        return _key(item) if item is not None else None
 
     def show_preview(self) -> None:
-        idea = self.current()
-        if idea is not None:
-            text = views.preview_markdown(idea, self.schema)
+        item = self.current_item()
+        if isinstance(item, BrokenFile):
+            text = (
+                f"# {item.path.name}\n\nThis file cannot be read: {item.error}\n\n"
+                "Press e to fix it in your editor."
+            )
+        elif item is not None:
+            text = views.preview_markdown(item, self.schema)
         else:
-            text = NO_MATCH if self.ideas else EMPTY_STORE
+            text = NO_MATCH if self.ideas or self.broken_files else EMPTY_STORE
         self.query_one("#preview", Markdown).update(text)
 
     def selected(self) -> Idea | None:
         """The idea under the cursor, read again from its file."""
-        idea = self.current()
-        if idea is None:
+        item = self.current_item()
+        if isinstance(item, BrokenFile):
+            self.notify_once(FIX_FIRST)
+            return None
+        if item is None:
             self.notify_once(EMPTY_STORE if not self.ideas else "No idea selected.")
             return None
         try:
-            return Idea.load(idea.path) if idea.path else idea
+            return Idea.load(item.path) if item.path else item
         except (OSError, IdeaError) as exc:
-            self.notify(f"Could not read {idea.id}: {exc}", severity="error", markup=False)
+            self.notify(f"Could not read {item.id}: {exc}", severity="error", markup=False)
             self.reload()
             return None
 
@@ -423,8 +459,14 @@ class PetApp(App[None]):
             self.reload(idea.id)
 
     def action_edit(self) -> None:
-        idea = self.selected()
-        if idea is not None and idea.path is not None:
-            path = str(idea.path)
-            self.outside(lambda: click.edit(filename=path))
-            self.reload(idea.id)
+        item = self.current_item()
+        if item is None:
+            self.notify_once(EMPTY_STORE if not self.ideas else "No idea selected.")
+            return
+        path = item.path
+        if path is None:
+            return
+        key = _key(item)
+        self.outside(lambda: click.edit(filename=str(path)))
+        # Stay on the same row, whether or not the file can be read now.
+        self.reload(key)
