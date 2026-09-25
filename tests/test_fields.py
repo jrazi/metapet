@@ -83,7 +83,7 @@ def test_scale_in_a_section_reads_the_first_number():
 def test_display_shortens():
     assert fields.display(field("tags"), ["a", "b"]) == "a, b"
     long = fields.display(field("problem"), "x" * 100 + "\nsecond")
-    assert len(long) == 60 and long.endswith("...")
+    assert len(long) == 60 and long.endswith("…")
     assert fields.display(field("problem"), None) == ""
 
 
@@ -107,7 +107,13 @@ def apply(idea, *tokens):
 def test_apply_changes():
     idea = Idea(id="x", title="X", tags=["Old", "keep"], body="Line.")
     done = apply(idea, "excitement=4", "why-now=soon", "+cli", "+CLI", "-old", "summary=")
-    assert done == ["excitement 4", "why_now soon", "summary cleared", "+cli", "-old"]
+    assert done == [
+        "excitement: 4",
+        "why_now: soon",
+        "summary: cleared",
+        "tags: +cli",
+        "tags: -old",
+    ]
     assert idea.excitement == 4 and idea.tags == ["keep", "cli"]
     assert idea.updated == dt.date.today()
     assert fields.get(idea, field("why_now")) == "soon"

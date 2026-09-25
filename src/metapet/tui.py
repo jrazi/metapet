@@ -153,6 +153,8 @@ class PetApp(App[None]):
         self.ideas: list[Idea] = []
         self.shown: list[Idea] = []
         self.broken = 0
+        self.hint_shown = False  # the "Press Enter to skip" hint, shown once per run
+        self.sessions: list[wizard.Session] = []
 
     # -- layout ------------------------------------------------------------------
 
@@ -246,13 +248,17 @@ class PetApp(App[None]):
             return None
 
     def session(self) -> wizard.Session:
-        return wizard.Session(
+        """A question session; the start hint is shown only in the first one that starts."""
+        s = wizard.Session(
             self.schema,
             self.prompter(),
             self.store.save,
             self.store.all_tags(),
+            started=self.hint_shown,
             exists=self.store.exists,
         )
+        self.sessions.append(s)
+        return s
 
     # -- events ------------------------------------------------------------------
 
@@ -349,6 +355,8 @@ class PetApp(App[None]):
                 problems.append(exc.format_message())
 
         self.run_outside(guarded)
+        self.hint_shown = self.hint_shown or any(s.started for s in self.sessions)
+        self.sessions.clear()
         for problem in problems:
             self.notify(problem, severity="warning", markup=False)
 

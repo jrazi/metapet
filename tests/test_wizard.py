@@ -42,7 +42,17 @@ def test_new_idea_asks_only_missing_seed_fields(store):
     saved = on_disk(store, idea)
     assert saved.excitement == 4 and saved.body.strip() == "Track spending."
     assert p.cards[0].title == "Budget tracker"
-    assert "pet set budget-tracker KEY=" in p.messages[0]
+    assert p.messages[0] == (
+        "Press Enter to skip a question. Change answers later with pet refine budget-tracker."
+    )
+
+
+def test_start_hint_once_per_session(store):
+    idea = store.create("Budget tracker")
+    s, p = session(store, ["One.", "Two."])
+    wizard.refine(s, idea, S.field("summary"))
+    wizard.refine(s, idea, S.field("summary"))
+    assert len([m for m in p.messages if m.startswith("Press Enter")]) == 1
 
 
 def test_answers_are_saved_before_ctrl_c(store):

@@ -95,8 +95,33 @@ def test_long_paths_are_never_wrapped(home, monkeypatch):
     monkeypatch.setattr(cli.console, "width", 20)
     pet(home, "init")
     assert pet(home, "where").output.startswith(str(home.path))
-    added = pet(home, "add", "Long idea title that makes a long path").output
+    added = pet(home, "add", "Long idea title that makes a long path", "-v").output
     assert str(home.ideas / "long-idea-title-that-makes-a-long-path.md") in added
+
+
+def test_add_prints_id_and_title_without_path(home):
+    pet(home, "init")
+    assert pet(home, "add", "Budget tracker").output == "+ budget-tracker  Budget tracker\n"
+    result = pet(home, "new", "x" * 55, "--id", "long", "--no-input")
+    assert result.output == "+ long  " + "x" * 49 + "…\n"
+
+
+def test_verbose_prints_path(home):
+    pet(home, "init")
+    added = pet(home, "add", "Budget tracker", "-v").output
+    assert str(home.ideas / "budget-tracker.md") in added
+    moved = pet(home, "promote", "budget", "-v").output
+    assert moved.startswith("budget-tracker: seed → sketch")
+    assert str(home.ideas / "budget-tracker.md") in moved
+    assert "budget-tracker.md" not in pet(home, "promote", "budget").output
+
+
+def test_set_prints_one_line_per_change(home):
+    pet(home, "init")
+    pet(home, "add", "Plant bot")
+    pet(home, "promote", "plant")
+    result = pet(home, "set", "plant", "problem=a b", "value=c")
+    assert result.output.splitlines() == ["plant-bot: problem: a b", "  value: c"]
 
 
 def complete(home, words):
@@ -174,7 +199,12 @@ def test_set_changes_fields_and_tags(home):
     pet(home, "add", "Budget tracker", "-t", "old", "-t", "keep")
     result = pet(home, "set", "budget", "excitement=4", "+cli", "-old", "features=a", "features=b")
     assert result.exit_code == 0, result.output
-    assert "budget-tracker: excitement 4, features a, b, +cli, -old" in result.output
+    assert result.output.splitlines() == [
+        "budget-tracker: excitement: 4",
+        "  features: a, b",
+        "  tags: +cli",
+        "  tags: -old",
+    ]
     text = idea_text(home, "budget-tracker")
     assert "- keep\n- cli" in text and "## Features\n- a\n- b" in text
     assert pet(home, "set", "budget", "--", "-keep").exit_code == 0

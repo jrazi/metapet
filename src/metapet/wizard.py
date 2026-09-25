@@ -58,8 +58,7 @@ def _start(s: Session, idea: Idea) -> None:
     if not s.started:
         s.started = True
         s.prompter.message(
-            f"Press Enter to skip a question. To clear a value later, run "
-            f"pet set {idea.id} KEY= (for example: pet set {idea.id} summary=)."
+            f"Press Enter to skip a question. Change answers later with pet refine {idea.id}."
         )
     show_card(s, idea)
 

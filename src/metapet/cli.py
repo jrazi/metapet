@@ -188,6 +188,10 @@ def _complete_ids(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
 
 TITLE_HELP = "Short name for the idea, a few words (the id is made from it)."
 
+Verbose = Annotated[
+    bool, typer.Option("--verbose", "-v", help="Also print the path of the idea file.")
+]
+
 IdOption = Annotated[
     str | None,
     typer.Option(
@@ -287,6 +291,25 @@ def _print_idea(idea: Idea) -> None:
         console.print(Markdown(idea.body))
 
 
+def _cut(text: str, width: int) -> str:
+    """text shortened to width characters, ending with … when cut."""
+    return text if len(text) <= width else text[: width - 1].rstrip() + "…"
+
+
+def _print_added(idea: Idea, verbose: bool) -> None:
+    line = f"[green]+[/] {escape(idea.id)}  [dim]{escape(_cut(idea.title, 50))}[/]"
+    if verbose:
+        line += f"  [dim]{escape(str(idea.path))}[/]"
+    console.print(line, soft_wrap=True, highlight=False)
+
+
+def _print_moved(idea: Idea, old: Status, new: Status, verbose: bool) -> None:
+    line = f"{escape(idea.id)}: {_status(old)} → {_status(new)}"
+    if verbose:
+        line += f"  [dim]{escape(str(idea.path))}[/]"
+    console.print(line, soft_wrap=True, highlight=False)
+
+
 # -- setup -------------------------------------------------------------------
 
 
@@ -351,6 +374,7 @@ def add(
         ),
     ] = False,
     id_: IdOption = None,
+    verbose: Verbose = False,
 ) -> None:
     """Capture a seed instantly, without opening an editor.
 
@@ -366,7 +390,7 @@ def add(
         idea = store.create(title, id=id_, tags=list(tag or []), body=note or "")
     except ValueError as exc:
         _fail(escape(str(exc)))
-    console.print(f"[green]+[/] {escape(idea.id)}  [dim]{escape(str(idea.path))}[/]", soft_wrap=True)
+    _print_added(idea, verbose)
     if idea_schema is None:
         return
     if not _interactive(False):
@@ -411,6 +435,7 @@ def new(
     ] = None,
     id_: IdOption = None,
     no_input: NoInput = False,
+    verbose: Verbose = False,
 ) -> None:
     """Capture an idea with its seed fields.
 
@@ -461,7 +486,7 @@ def new(
     fields.apply_changes(idea, idea_schema, _changes(flagged) + extra)
     idea.updated = None  # just created
     store.save(idea)
-    console.print(f"[green]+[/] {escape(idea.id)}  [dim]{escape(str(idea.path))}[/]", soft_wrap=True)
+    _print_added(idea, verbose)
     if session is None:
         return
     supplied = {"title", *(key for key, value in flagged.items() if value is not None)}
@@ -602,7 +627,8 @@ def set_(
         console.print(f"{escape(idea.id)}: no change")
         return
     store.save(idea)
-    console.print(f"{escape(idea.id)}: {escape(', '.join(done))}")
+    lines = [f"{idea.id}: {done[0]}", *(f"  {change}" for change in done[1:])]
+    console.print("\n".join(lines), soft_wrap=True, markup=False, highlight=False)
 
 
 @app.command()
@@ -677,6 +703,7 @@ def promote(
         Status | None, typer.Option("--to", help="Target status (default: the next one).")
     ] = None,
     no_input: NoInput = False,
+    verbose: Verbose = False,
 ) -> None:
     store = _store(ctx)
     idea_schema = _schema(ctx)
@@ -693,18 +720,12 @@ def promote(
             if not wizard.promote(_session(store, idea_schema), idea, target):
                 console.print("Not promoted.")
                 return
-        console.print(
-            f"{escape(idea.id)}: {_status(old)} → {_status(target)}  [dim]{escape(str(idea.path))}[/]",
-            soft_wrap=True,
-        )
+        _print_moved(idea, old, target, verbose)
         return
     gaps = stages.gaps(idea, idea_schema, stages.before(target)) if forward else []
     stages.promote(idea, target, idea_schema)
     store.save(idea)
-    console.print(
-        f"{escape(idea.id)}: {_status(old)} → {_status(target)}  [dim]{escape(str(idea.path))}[/]",
-        soft_wrap=True,
-    )
+    _print_moved(idea, old, target, verbose)
     if gaps:
         labels = escape(", ".join(f.label for f in gaps))
         err.print(

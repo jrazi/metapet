@@ -5,7 +5,7 @@ them from a one-line seed into a buildable spec.
 
 ```console
 $ pet add "Spotify downloader bot for Telegram" -t telegram -t bot
-+ spotify-downloader-bot-for-telegram
++ spotify-downloader-bot-for-telegram  Spotify downloader bot for Telegram
 $ pet promote spotify
 spotify-downloader-bot-for-telegram: seed → sketch
 $ pet next
@@ -149,15 +149,15 @@ shows the stages and field keys in use, and `pet check` reports mistakes in your
 | Command | What it does |
 |---|---|
 | `pet init [--local] [--git] [--remote URL]` | Create the store, optionally as a git repo |
-| `pet add TITLE [-t TAG]… [-m NOTE] [--id ID] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
-| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--id ID] [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
+| `pet add TITLE [-t TAG]… [-m NOTE] [--id ID] [-v] [-i]` | Capture a seed instantly; `-i` then asks the other seed questions |
+| `pet new [TITLE] [-m SUMMARY] [-t TAG]… [-x 1-5] [-s KEY=VALUE]… [--id ID] [-v] [--no-input]` | Capture an idea, asking for the seed fields not given as options, then offering the next stages |
 | `pet ls [-s STATUS]… [-t TAG]… [--sort created\|excitement\|impact\|score\|title] [-a]` | List live ideas (`-a` includes shipped/shelved) |
 | `pet show ID` · `pet edit ID` | View or edit; `ID` can be any unique prefix or fragment |
 | `pet edit ID --field FIELD` | Edit one section in `$EDITOR` |
 | `pet set ID KEY=VALUE… [+TAG] [-TAG]` | Change fields; an empty value clears one |
 | `pet note ID TEXT` | Add a dated line to the Notes section |
 | `pet rename ID [NEW_ID]` | Change an idea's id and file name; without `NEW_ID`, make it from the title |
-| `pet promote ID [--to STATUS] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
+| `pet promote ID [--to STATUS] [-v] [--no-input]` | Advance the lifecycle and ask the new stage's questions; warns about empty expected fields |
 | `pet refine ID [FIELD] [--no-input]` | Answer one field again, or pick fields from a list |
 | `pet shelve ID REASON` | Park an idea, remembering why |
 | `pet review [--days N] [--no-input]` | Go through live ideas not looked at for N days (default 14) |
@@ -171,6 +171,11 @@ shows the stages and field keys in use, and `pet check` reports mistakes in your
 | `pet where` | Show the data directory in use |
 | `pet sync [-m MSG]` | Git backup: commit, pull --rebase, push |
 | `pet export [--md FILE] [--json FILE]` | Markdown index and/or JSON dump |
+
+The title is a short name. When the title given to `add` or `new` is longer than 60
+characters or 8 words, its first words become the title and the full text is kept as
+the summary; in a terminal, `new` asks first. `add`, `new` and `promote` print the id;
+`-v` also prints the path of the file (`pet where` shows the data directory).
 
 `new`, `add -i`, `promote`, `refine` and `review` ask questions only when run in a
 terminal; `--no-input` turns the questions off, and outside a terminal they use only

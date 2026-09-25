@@ -170,7 +170,7 @@ def display(field: Field, value: Value) -> str:
     lines = text.strip().splitlines()
     text = lines[0] if lines else ""
     if len(text) > DISPLAY_WIDTH:
-        text = text[: DISPLAY_WIDTH - 3].rstrip() + "..."
+        text = text[: DISPLAY_WIDTH - 1].rstrip() + "…"
     return text
 
 
@@ -250,16 +250,16 @@ def apply_changes(idea: Idea, schema: Schema, changes: list[Change]) -> list[str
         if get(idea, field) == value or (value is None and not is_filled(idea, field)):
             continue
         put(idea, field, value, schema.section_order)
-        done.append(f"{key} {display(field, value)}" if value is not None else f"{key} cleared")
+        done.append(f"{key}: {display(field, value)}" if value is not None else f"{key}: cleared")
     for change in changes:
         wanted = change.value.casefold()
         present = [t.casefold() for t in idea.tags]
         if change.op == "add_tag" and wanted not in present:
             idea.tags.append(change.value)
-            done.append(f"+{change.value}")
+            done.append(f"tags: +{change.value}")
         elif change.op == "remove_tag" and wanted in present:
             idea.tags = [t for t in idea.tags if t.casefold() != wanted]
-            done.append(f"-{change.value}")
+            done.append(f"tags: -{change.value}")
     if done:
         idea.touch()
     return done
