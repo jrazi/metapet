@@ -84,3 +84,24 @@ def test_parse_query_unknown_status():
     q = views.parse_query("status:bogus status:seed tag:CLI word")
     assert q.unknown_statuses == ["bogus"]
     assert q.statuses == {"bogus", "seed"} and q.tags == {"cli"} and q.words == ["word"]
+
+
+def test_visible_body_uses_labels_and_lists_missing_sections():
+    idea = Idea(
+        id="x",
+        title="X",
+        status=Status.SKETCH,
+        body="## problem\nToo slow.\n\n## solution\nCache.\n",
+    )
+    body, empty = views.visible_body(idea, S)
+    assert "## Problem\nToo slow." in body and "## Rough solution\nCache." in body
+    assert empty == ["Who it's for", "Value", "Why now"]
+
+
+def test_visible_body_keeps_line_breaks():
+    idea = Idea(
+        id="x", title="X", body="## Problem\nline one\nline two\n\n```\ncode a\ncode b\n```\n"
+    )
+    body, _ = views.visible_body(idea, S)
+    assert "line one  \nline two" in body
+    assert "code a\ncode b" in body

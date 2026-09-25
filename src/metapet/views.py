@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from metapet import fields, sections
 from metapet.model import Idea, Status
-from metapet.schema import Schema, Storage
+from metapet.schema import LIFECYCLE, Field, Schema, Storage
 
 
 @dataclass(frozen=True)
@@ -30,27 +30,54 @@ def card(idea: Idea, schema: Schema) -> Card:
 
 
 def visible_body(idea: Idea, schema: Schema) -> tuple[str, list[str]]:
-    """The body without its empty sections, and the names of those sections.
+    """The body for display, without its empty sections, and the names of the empty ones.
 
     A section counts as empty when it holds only whitespace, comments or bare list markers.
-    Required fields are marked with *.
+    Expected sections of the idea's stages that are missing from the file count as empty too.
+    Headings of known fields are shown with their label. Required fields are marked with *.
     """
     body = sections.parse(idea.body)
     kept: list[sections.Section] = []
     empty: list[str] = []
+    present: set[str] = set()
+
+    def name(field: Field) -> str:
+        return f"{field.label}*" if field.required else field.label
+
     for section in body.sections:
-        if not sections.is_empty(section.content):
-            kept.append(section)
-            continue
         field = next(
             (f for f in schema.section_fields() if f.matches_heading(section.heading)), None
         )
-        if field is None:
-            empty.append(section.heading)
+        if field is not None:
+            present.add(field.key)
+        if not sections.is_empty(section.content):
+            heading = field.label if field is not None else section.heading
+            kept.append(sections.Section(heading, section.content))
         else:
-            empty.append(f"{field.label}*" if field.required else field.label)
+            empty.append(name(field) if field is not None else section.heading)
+    if idea.status in LIFECYCLE:
+        for status in LIFECYCLE[: LIFECYCLE.index(idea.status) + 1]:
+            for field in schema.stage(status).fields:
+                if field.storage == Storage.SECTION and field.key not in present:
+                    empty.append(name(field))
+                    present.add(field.key)
     preamble = sections.strip_comments(body.preamble).strip()
-    return sections.render(sections.Body(preamble, kept)), empty
+    return hard_breaks(sections.render(sections.Body(preamble, kept))), empty
+
+
+def hard_breaks(markdown: str) -> str:
+    """Keep the line breaks the user typed: Markdown would join single lines into one."""
+    lines = markdown.split("\n")
+    out: list[str] = []
+    fenced = False
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+        following = lines[index + 1] if index + 1 < len(lines) else ""
+        if not fenced and line.strip() and following.strip() and not line.startswith("#"):
+            line = line.rstrip() + "  "
+        out.append(line)
+    return "\n".join(out)
 
 
 def empty_line(empty: list[str]) -> str:
